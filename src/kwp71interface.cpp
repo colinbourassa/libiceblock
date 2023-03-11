@@ -31,13 +31,54 @@ void Kwp71Interface::shutdown()
 
 bool Kwp71Interface::sendPacket()
 {
-  return false;
+  bool status = true;
+  uint8_t index = 0;
+  uint8_t loopback = 0;
+  uint8_t ack = 0;
+
+  while (status && (index < m_sendPacketBuf[0]))
+  {
+    status =
+      (write(m_fd, &m_sendPacketBuf[index], 1) == 1) &&
+      (read(m_fd, &loopback, 1) == 1) &&
+      (read(m_fd, &ack, 1) == 1) &&
+      (ack = ~(m_sendPacketBuf[index]));
+    index++;
+  }
+  return status;
 }
 
 bool Kwp71Interface::recvPacket()
 {
-  // TODO: be sure to record m_lastUsedSeqNum
-  return false;
+  bool status = true;
+  uint8_t index = 1;
+  uint8_t loopback = 0;
+  uint8_t ack = 0;
+
+  if (read(m_fd, &m_recvPacketBuf[0], 1) == 1)
+  {
+    while (status && (index < m_recvPacketBuf[0]))
+    {
+      if (read(m_fd, &m_recvPacketBuf[index], 1) == 1)
+      {
+        ack = ~(m_recvPacketBuf[index]);
+        status =
+          (write(m_fd, &ack, 1) == 1) &&
+          (read(m_fd, &loopback, 1) == 1);
+      }
+      else
+      {
+        status = false;
+      }
+    }
+  }
+
+  if (status)
+  {
+    m_lastUsedSeqNum = m_recvPacketBuf[1];
+  }
+
+  return status;
 }
 
 void Kwp71Interface::populatePacket(Kwp71PacketType type)
