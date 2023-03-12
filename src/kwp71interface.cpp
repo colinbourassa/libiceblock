@@ -14,16 +14,26 @@ Kwp71Interface::Kwp71Interface(std::string device) :
   m_ifThread = std::thread(commLoop, this, &m_shutdown);
 }
 
+/**
+ * Opens and sets up the serial port device.
+ */
 bool Kwp71Interface::openSerialPort()
 {
   return false;
 }
 
+/**
+ * Closes the serial port device.
+ */
 void Kwp71Interface::closeDevice()
 {
   close(m_fd);
 }
 
+/**
+ * Shuts down the connection and waits for the connection thread to
+ * finish.
+ */
 void Kwp71Interface::shutdown()
 {
   m_shutdown = true;
@@ -31,6 +41,12 @@ void Kwp71Interface::shutdown()
   closeDevice();
 }
 
+/**
+ * Sends a KWP-71 packet by transmitting it one byte at a time and waiting
+ * for positive acknowledgement of each byte by the receiving ECU.
+ * Returns true if every byte (except the last) is met with a bitwise
+ * inversion of that byte in response from the ECU; false otherwise.
+ */
 bool Kwp71Interface::sendPacket()
 {
   bool status = true;
@@ -38,17 +54,22 @@ bool Kwp71Interface::sendPacket()
   uint8_t loopback = 0;
   uint8_t ack = 0;
 
-  while (status && (index < m_sendPacketBuf[0]))
+  while (status && (index <= m_sendPacketBuf[0]))
   {
     // Transmit the packet one byte at a time, reading back the same byte as
     // it appears in the Rx buffer (due to the loopback) and then reading the
-    // acknowledgement byte from the ECU. Verify that the ack byte is the
-    // bitwise inversion of the transmitted byte.
+    // acknowledgement byte from the ECU (for every byte except the last).
+    // Verify that the ack byte is the bitwise inversion of the sent byte.
     status =
       (write(m_fd, &m_sendPacketBuf[index], 1) == 1) &&
-      (read(m_fd, &loopback, 1) == 1) &&
-      (read(m_fd, &ack, 1) == 1) &&
-      (ack == ~(m_sendPacketBuf[index]));
+      (read(m_fd, &loopback, 1) == 1);
+
+    if (index < m_sendPacketBuf[3])
+    {
+      status = status &&
+        (read(m_fd, &ack, 1) == 1) &&
+        (ack == ~(m_sendPacketBuf[index]));
+    }
     index++;
   }
   return status;
@@ -71,13 +92,17 @@ bool Kwp71Interface::recvPacket(Kwp71PacketType& type)
       if (read(m_fd, &m_recvPacketBuf[index], 1) == 1)
       {
         std::cout << " " << m_recvPacketBuf[index];
-        ack = ~(m_recvPacketBuf[index]);
-        status =
-          (write(m_fd, &ack, 1) == 1) &&
-          (read(m_fd, &loopback, 1) == 1);
+        if (index < m_recvPacketBuf[0])
+        {
+          ack = ~(m_recvPacketBuf[index]);
+          status =
+            (write(m_fd, &ack, 1) == 1) &&
+            (read(m_fd, &loopback, 1) == 1);
+        }
       }
       else
       {
+        std::cerr << std::endl << "Timed out while receiving packet data!" << std::endl;
         status = false;
       }
     }
@@ -289,6 +314,11 @@ bool Kwp71Interface::readAckKeywordBytes()
   return status;
 }
 
+void Kwp71Interface::processReceivedPacket()
+{
+  //TODO
+}
+
 /**
  * Loop that maintains a connection with the ECU. When no particular
  * commands are queued, the empty/ACK (09) command is sent as a
@@ -312,13 +342,13 @@ void Kwp71Interface::commLoop(Kwp71Interface* iface, bool* shutdown)
     }
 
     Kwp71Command cmd;
-    bool receivedPacketWasAck = true;
+    Kwp71PacketType lastReceivedPacketType;
 
     // continue taking turns with the ECU, transmitting one
     // packet per turn
     while (connectionAlive && !shutdown)
     {
-      if (receivedPacketWasAck)
+      if (lastReceivedPacketType == Kwp71PacketType::Empty)
       {
         // only look for the next command to send when we're not
         // in the middle of receiving packets from the ECU that
@@ -332,10 +362,9 @@ void Kwp71Interface::commLoop(Kwp71Interface* iface, bool* shutdown)
 
       iface->populatePacket(cmd.type, cmd.payload);
       iface->sendPacket();
-      Kwp71PacketType receivedType;
-      if (iface->recvPacket(receivedType))
+      if (iface->recvPacket(lastReceivedPacketType))
       {
-        receivedPacketWasAck = (receivedType == Kwp71PacketType::Empty);
+        iface->processReceivedPacket();
       }
       else
       {

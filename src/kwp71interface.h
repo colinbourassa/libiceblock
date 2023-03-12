@@ -53,6 +53,7 @@ private:
   void closeDevice();
   bool sendPacket();
   bool recvPacket(Kwp71PacketType& type);
+  void processReceivedPacket();
   bool slowInit(uint8_t address, int databits, int parity);
   static void commLoop(Kwp71Interface* iface, bool* shutdown);
 };
