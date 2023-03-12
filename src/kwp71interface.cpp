@@ -2,16 +2,24 @@
 #include <libftdi1/ftdi.h>
 #include <iostream>
 #include <iomanip>
-#include <unistd.h>
 #include <chrono>
+#include <semaphore>
 
-Kwp71Interface::Kwp71Interface(std::string device) :
+#include <termios.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
+Kwp71Interface::Kwp71Interface(std::string device, uint8_t addr) :
   m_shutdown(false),
   m_deviceName(device),
   m_fd(-1),
-  m_lastUsedSeqNum(0)
+  m_lastUsedSeqNum(0),
+  m_cmdSemaphore({1}),
+  m_responseSemaphore({0})
 {
-  m_ifThread = std::thread(commLoop, this, &m_shutdown);
+  m_ifThread = std::thread(commLoop, this, &m_shutdown, addr);
 }
 
 /**
@@ -19,7 +27,126 @@ Kwp71Interface::Kwp71Interface(std::string device) :
  */
 bool Kwp71Interface::openSerialPort()
 {
-  return false;
+#if defined(linux)
+  struct termios newtio;
+  bool success = true;
+
+  std::cout << "Opening the serial device (" << m_deviceName << ")..." << std::endl;
+  m_fd = open(m_deviceName.c_str(), O_RDWR | O_NOCTTY);
+
+  if (m_fd > 0)
+  {
+    std::cout << "Opened device successfully." << std::endl;
+
+    if (tcgetattr(m_fd, &newtio) != 0)
+    {
+      std::cerr << "Unable to read serial port parameters." << std::endl;
+      success = false;
+    }
+
+    if (success)
+    {
+      // set up the serial port:
+      // * enable the receiver, set 8-bit fields, set local mode, disable hardware flow control
+      // * set non-canonical mode, disable echos, disable signals
+      // * disable all special handling of CR or LF, disable all software flow control
+      // * disable all output post-processing
+      newtio.c_cflag &= ((CREAD | CS8 | CLOCAL) & ~(CRTSCTS));
+      newtio.c_lflag &= ~(ICANON | ECHO | ECHOE | ISIG);
+      newtio.c_iflag &= ~(INLCR | ICRNL | IGNCR | IXON | IXOFF | IXANY);
+      newtio.c_oflag &= ~OPOST;
+
+      // when waiting for responses, wait until we haven't received any
+      // characters for a period of time before returning with failure
+      newtio.c_cc[VTIME] = 1;
+      newtio.c_cc[VMIN] = 0;
+
+      cfsetispeed(&newtio, B9600);
+      cfsetospeed(&newtio, B9600);
+
+      // attempt to set the termios parameters
+      std::cout << "Setting serial port parameters..." << std::endl;
+
+      // flush the serial buffers and set the new parameters
+      if ((tcflush(m_fd, TCIFLUSH) != 0) ||
+          (tcsetattr(m_fd, TCSANOW, &newtio) != 0))
+      {
+        std::cerr << "Failure setting up port" << std::endl;
+        close(m_fd);
+        success = false;
+      }
+    }
+
+    // close the device if it couldn't be configured
+    if (!success)
+    {
+      close(m_fd);
+    }
+  }
+  else // open() returned failure
+  {
+    std::cerr << "Error opening device (" << m_deviceName << ")" << std::endl;
+  }
+
+#elif defined(WIN32)
+
+  DCB dcb;
+  COMMTIMEOUTS commTimeouts;
+
+  // attempt to open the device
+  std::cout << "Opening the serial device (Win32) '" << m_deviceName << "'..." << std::endl;
+
+  // open and get a handle to the serial device
+  m_fd = CreateFile(devPath, GENERIC_READ | GENERIC_WRITE, 0, NULL,
+                    OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+
+  // verify that the serial device was opened
+  if (m_fd != INVALID_HANDLE_VALUE)
+  {
+    if (GetCommState(m_fd, &dcb) == TRUE)
+    {
+      // set the serial port parameters
+      dcb.BaudRate = 9600;
+      dcb.fParity = FALSE;
+      dcb.fOutxCtsFlow = FALSE;
+      dcb.fOutxDsrFlow = FALSE;
+      dcb.fDtrControl = FALSE;
+      dcb.fRtsControl = FALSE;
+      dcb.ByteSize = 8;
+      dcb.Parity = 0;
+      dcb.StopBits = 0;
+
+      if ((SetCommState(m_fd, &dcb) == TRUE) &&
+          (GetCommTimeouts(m_fd, &commTimeouts) == TRUE))
+      {
+        // modify the COM port parameters to wait 100 ms before timing out
+        commTimeouts.ReadIntervalTimeout = 100;
+        commTimeouts.ReadTotalTimeoutMultiplier = 0;
+        commTimeouts.ReadTotalTimeoutConstant = 100;
+
+        if (SetCommTimeouts(m_fd, &commTimeouts) == TRUE)
+        {
+          success = true;
+        }
+      }
+    }
+
+    // the serial device was opened, but couldn't be configured properly;
+    // close it before returning with failure
+    if (!success)
+    {
+      std::cerr << "Failure setting up port; closing serial device..." << std::cerr;
+      CloseHandle(m_fd);
+    }
+  }
+  else
+  {
+    std::cerr << "Error opening device." << std::endl;
+  }
+
+#endif
+
+  return success;
 }
 
 /**
@@ -75,6 +202,12 @@ bool Kwp71Interface::sendPacket()
   return status;
 }
 
+/**
+ * Reads a packet from the serial port, the length of which is determined by
+ * the first byte. Each byte (except the last) is positively acknowledged with
+ * its bitwise inversion. Returns true if all the expected bytes are received,
+ * false otherwise.
+ */
 bool Kwp71Interface::recvPacket(Kwp71PacketType& type)
 {
   bool status = true;
@@ -119,6 +252,9 @@ bool Kwp71Interface::recvPacket(Kwp71PacketType& type)
   return status;
 }
 
+/**
+ * Populates a local buffer with the contents of a packet to be transmitted.
+ */
 bool Kwp71Interface::populatePacket(Kwp71PacketType type,
                                     const std::vector<uint8_t>& payload)
 {
@@ -266,18 +402,11 @@ bool slowInit(uint8_t address, int databits, int parity)
   return status;
 }
 
-void Kwp71Interface::getNextPendingCommand(Kwp71Command& cmd)
-{
-  // TODO: read from a queue of pending commands
-  if (0)
-  {
-  }
-  else
-  {
-    cmd.type = Kwp71PacketType::Empty;
-  }
-}
-
+/**
+ * Reads the three sync/keyword bytes that are transmitted by the ECU
+ * immediately after the 5-baud slow init, and replies with the bitwise
+ * inversion of the third byte as an acknowledgement.
+ */
 bool Kwp71Interface::readAckKeywordBytes()
 {
   bool status = false;
@@ -314,17 +443,98 @@ bool Kwp71Interface::readAckKeywordBytes()
   return status;
 }
 
+std::vector<std::string> Kwp71Interface::requestIDInfo()
+{
+  // wait until any previous pending command has been fully processed
+  m_cmdSemaphore.acquire();
+
+  cmd.type = Kwp71PacketType::RequestID;
+
+  // wait until the response from this command has been completely received
+  m_responseSemaphore.acquire();
+  std::vector<std::string> responseData(m_responseStringData);
+  m_responseStringData.clear();
+
+  return responseData;
+}
+
+/**
+ * Queues a command to be sent to the ECU at the next opportunity, and waits
+ * to receive the response.
+ */
+std::vector<uint8_t> Kwp71Interface::sendCommand(Kwp71Command cmd)
+{
+  // wait until any previous pending command has been fully processed
+  m_cmdSemaphore.acquire();
+
+  m_pendingCmd = cmd;
+
+  // wait until the response from this command has been completely received
+  m_responseSemaphore.acquire();
+  std::vector<uint8_t> responseData(m_response);
+  m_response.clear();
+
+  return responseData;
+}
+
+/**
+ * Parses the data in the received packet buffer and takes the appropriate
+ * action to package and return the data.
+ */
 void Kwp71Interface::processReceivedPacket()
 {
-  //TODO
+  const Kwp71PacketType type = (Kwp71PacketType)(m_recvPacketBuf[2]);
+  const uint8_t payloadLen = m_recvPacketBuf[0] - 3;
+
+  switch (type)
+  {
+  case Kwp71PacketType::ParamRecordConf:
+  case Kwp71PacketType::Snapshot:
+    break;
+  case Kwp71PacketType::ASCIIString:
+    m_responseStringData.push_back(std::string(m_recvPacketBuf[3], payloadLen);
+    break;
+  case Kwp71PacketType::DACValue:
+  case Kwp71PacketType::BinaryData:
+  case Kwp71PacketType::RAMContent:
+  case Kwp71PacketType::ROMContent:
+  case Kwp71PacketType::EEPROMContent:
+  case Kwp71PacketType::ParametricData:
+    m_response.push_back(&m_recvPacketBuf[3], &m_recvPacketBuf[3] + payloadLen);
+    break;
+  }
+}
+
+/**
+ * Loops, collecting data from packets sent by the ECU until an ACK/empty
+ * packet is sent (indicating that the ECU is done sending that sequence
+ * of data. Returns true when an ACK/empty packet was ultimately received
+ * from the ECU; false if the connection timed out or was shut down.
+ */
+bool Kwp71Interface::collectResponsePackets()
+{
+  Kwp71PacketType type;
+  bool status = true;
+  do
+  {
+    if (recvPacket(type))
+    {
+      processReceivedPacket();
+    }
+    else
+    {
+      status = false;
+    }
+  } while ((type != Kwp71PacketType::Empty) && status && !m_shutdown);
+
+  return (status && !m_shutdown);
 }
 
 /**
  * Loop that maintains a connection with the ECU. When no particular
- * commands are queued, the empty/ACK (09) command is sent as a
- * keepalive.
+ * command is queued, the empty/ACK (09) command is sent as a keepalive.
  */
-void Kwp71Interface::commLoop(Kwp71Interface* iface, bool* shutdown)
+void Kwp71Interface::commLoop(Kwp71Interface* iface, bool* shutdown, uint8_t addr)
 {
   bool connectionAlive = false;
 
@@ -334,45 +544,35 @@ void Kwp71Interface::commLoop(Kwp71Interface* iface, bool* shutdown)
     // re-attempting the 5-baud slow init if necessary
     while (!connectionAlive && !shutdown)
     {
-      iface->slowInit(0x10, 8, 0);
+      iface->slowInit(addr, 7, 0);
       if (iface->openSerialPort())
       {
         connectionAlive = iface->readAckKeywordBytes();
       }
     }
 
-    Kwp71Command cmd;
-    Kwp71PacketType lastReceivedPacketType;
+    // the ECU is expected to send its ID info unsolicited here
+    if (iface->collectResponsePackets())
+    {
+      // TODO
+    }
 
     // continue taking turns with the ECU, transmitting one
     // packet per turn
     while (connectionAlive && !shutdown)
     {
-      if (lastReceivedPacketType == Kwp71PacketType::Empty)
+      if (iface->collectResponsePackets())
       {
-        // only look for the next command to send when we're not
-        // in the middle of receiving packets from the ECU that
-        // were sent in response to a previous command
-        iface->getNextPendingCommand(cmd);
+        iface->m_responseSemaphore.release();
       }
       else
       {
-        cmd.type = Kwp71PacketType::Empty;
-      }
-
-      iface->populatePacket(cmd.type, cmd.payload);
-      iface->sendPacket();
-      if (iface->recvPacket(lastReceivedPacketType))
-      {
-        iface->processReceivedPacket();
-      }
-      else
-      {
-        // the ECU didn't respond during its turn, so we need to consider
-        // the connection dead
-        std::cout << "ECU didn't respond during its turn; connection has died" << std::endl;
+        std::cerr << "ECU didn't respond during its turn; connection has died" << std::endl;
         connectionAlive = false;
       }
+
+      iface->populatePacket(m_pendingCmd.type, m_pendingCmd.payload);
+      iface->sendPacket();
     }
 
     if (!connectionAlive)
