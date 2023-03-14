@@ -39,7 +39,7 @@ set (CPACK_SOURCE_IGNORE_FILES
       "build-win32")
 
 option (ENABLE_DOC_INSTALL "Enables installation of documentation (README, LICENSE, manpage) to the appropriate locations" OFF)
-#option (ENABLE_TESTAPP_INSTALL "Enables installation of the kwp71read utility" OFF)
+option (ENABLE_TESTAPP_INSTALL "Enables installation of the kwp71read utility" OFF)
 option (ENABLE_PKGCONFIG_INSTALL "Enables installation of a pkgconfig configuration file" ON)
 
 find_package (LibFTDI1 CONFIG REQUIRED)
@@ -57,7 +57,7 @@ endif()
 
 target_link_libraries (kwp71 ftdi1)
 
-#add_executable (kwp71read ${SOURCE_SUBDIR}/kwp71read.c)
+add_executable (kwp71read ${SOURCE_SUBDIR}/kwp71read.cpp)
 
 if (MINGW OR WIN32)
 
@@ -78,7 +78,7 @@ if (MINGW OR WIN32)
         VERSION   ${KWP71_VER_MAJOR}
   )
 
-  #target_link_libraries (kwp71read kwp71)
+  target_link_libraries (kwp71read kwp71)
 
   # MXE requires that documentation and test applications not be installed
   # by default, so we provide a couple env vars to control this
@@ -135,7 +135,7 @@ else()
         VERSION   ${KWP71_VERSION}
   )
 
-  #target_link_libraries (kwp71read kwp71 pthread)
+  target_link_libraries (kwp71read kwp71)
 
   if (ENABLE_DOC_INSTALL)
     install (DIRECTORY DESTINATION "${CMAKE_INSTALL_DOCDIR}" DIRECTORY_PERMISSIONS
@@ -225,10 +225,10 @@ endif()
 #
 # install the test applications
 #
-#if (ENABLE_TESTAPP_INSTALL)
-#  install (TARGETS kwp71read
-#           RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
-#else()
-#  message (STATUS "Skipping installation of test application.")
-#endif()
+if (ENABLE_TESTAPP_INSTALL)
+  install (TARGETS kwp71read
+           RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+else()
+  message (STATUS "Skipping installation of test application.")
+endif()
 

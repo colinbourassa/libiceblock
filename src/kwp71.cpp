@@ -22,6 +22,7 @@ Kwp71Version Kwp71::getLibraryVersion()
 }
 
 Kwp71::Kwp71(std::string device, uint8_t addr) :
+  m_connectionActive(false),
   m_ecuAddr(addr),
   m_shutdown(false),
   m_deviceName(device),
@@ -31,7 +32,15 @@ Kwp71::Kwp71(std::string device, uint8_t addr) :
   m_receivingData(false),
   m_responseReadSuccess(false)
 {
+}
+
+bool Kwp71::connect()
+{
   m_ifThread = std::thread(threadEntry, this);
+  // TODO: block until the 5-baud init has been completed, the serial port
+  // has been opened, and the connection to the ECU is active. Return true
+  // if all of that was successful; false otherwise.
+  return false;
 }
 
 /**
@@ -178,6 +187,11 @@ void Kwp71::shutdown()
   m_shutdown = true;
   m_ifThread.join();
   closeDevice();
+}
+
+bool Kwp71::isConnectionActive() const
+{
+  return m_connectionActive;
 }
 
 /**
@@ -339,7 +353,7 @@ bool Kwp71::populatePacket(bool usePendingCommand)
  * Performs the 'slow init' sequence by bit-banging the FTDI's transmit line to
  * clock out the provided address (with optional parity) at the requisite 5 baud.
  */
-bool slowInit(uint8_t address, int databits, int parity)
+bool Kwp71::slowInit(uint8_t address, int databits, int parity)
 {
   bool status = false;
   struct ftdi_context ftdic;
@@ -560,18 +574,24 @@ void Kwp71::threadEntry(Kwp71* iface)
  */
 void Kwp71::commLoop()
 {
-  bool connectionAlive = false;
-
   while (!m_shutdown)
   {
     // loop until the initialization sequence has completed,
     // re-attempting the 5-baud slow init if necessary
-    while (!connectionAlive && !m_shutdown)
+    while (!m_connectionActive && !m_shutdown)
     {
       slowInit(m_ecuAddr, 7, 0);
+
+      // TODO: can we attempt to open/configure the serial port before we
+      // do the slow init sequence? That would allow us to exit early with
+      // failure before attempting the 5-baud stuff.
       if (openSerialPort())
       {
-        connectionAlive = readAckKeywordBytes();
+        m_connectionActive = readAckKeywordBytes();
+      }
+      else
+      {
+        std::cerr << "Error opening serial device '" << m_deviceName << "'" << std::endl;
       }
     }
 
@@ -582,7 +602,7 @@ void Kwp71::commLoop()
     // routine to the bottom of the main loop)
 
     // continue taking turns with the ECU, sending one packet per turn
-    while (connectionAlive && !m_shutdown)
+    while (m_connectionActive && !m_shutdown)
     {
       // the readyForCommand flag is only set when the ECU is simply
       // sending empty ACK packets, waiting for us to send a command
@@ -616,11 +636,11 @@ void Kwp71::commLoop()
           m_responseCondVar.notify_one();
         }
         std::cerr << "ECU didn't respond during its turn" << std::endl;
-        connectionAlive = false;
+        m_connectionActive = false;
       }
     }
 
-    if (!connectionAlive)
+    if (!m_connectionActive)
     {
       closeDevice();
     }

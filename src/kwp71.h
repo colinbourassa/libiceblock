@@ -53,12 +53,14 @@ class Kwp71
 {
 public:
   Kwp71(std::string device, uint8_t addr);
+  bool connect();
   void shutdown();
   bool requestIDInfo(std::vector<std::string>& idResponse);
   bool sendCommand(Kwp71Command cmd, std::vector<uint8_t>& response);
   static Kwp71Version getLibraryVersion();
 
 private:
+  bool m_connectionActive;
   uint8_t m_ecuAddr;
   bool m_shutdown;
   std::thread m_ifThread;
@@ -79,6 +81,7 @@ private:
 
   static constexpr uint8_t s_endOfPacket = 0x03;
 
+  bool isConnectionActive() const;
   bool populatePacket(bool usePendingCommand);
   bool openSerialPort();
   bool readAckKeywordBytes();
