@@ -50,9 +50,9 @@ configure_file ("${SOURCE_SUBDIR}/kwp71_version.h.in"
 include_directories ("${CMAKE_SOURCE_DIR}/src" "${CMAKE_BINARY_DIR}")
 
 if (BUILD_STATIC STREQUAL "ON")
-  add_library (kwp71 STATIC ${SOURCE_SUBDIR}/kwp71interface.cpp)
+  add_library (kwp71 STATIC ${SOURCE_SUBDIR}/kwp71.cpp)
 else()
-  add_library (kwp71 SHARED ${SOURCE_SUBDIR}/kwp71interface.cpp)
+  add_library (kwp71 SHARED ${SOURCE_SUBDIR}/kwp71.cpp)
 endif()
 
 target_link_libraries (kwp71 ftdi1)

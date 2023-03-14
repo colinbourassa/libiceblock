@@ -5,6 +5,7 @@
 #include <queue>
 #include <condition_variable>
 #include <stdint.h>
+#include "kwp71_version.h"
 
 enum class Kwp71PacketType
 {
@@ -41,13 +42,21 @@ struct Kwp71Command
   std::vector<uint8_t> payload;
 };
 
-class Kwp71Interface
+struct Kwp71Version
+{
+  uint8_t major;
+  uint8_t minor;
+  uint8_t patch;
+};
+
+class Kwp71
 {
 public:
-  Kwp71Interface(std::string device, uint8_t addr);
+  Kwp71(std::string device, uint8_t addr);
   void shutdown();
   bool requestIDInfo(std::vector<std::string>& idResponse);
   bool sendCommand(Kwp71Command cmd, std::vector<uint8_t>& response);
+  static Kwp71Version getLibraryVersion();
 
 private:
   uint8_t m_ecuAddr;
@@ -61,7 +70,7 @@ private:
 
   bool m_readyForCommand;
   bool m_receivingData;
-  std::vector<uint8_t> m_response;
+  std::vector<uint8_t> m_responseBinaryData;
   std::vector<std::string> m_responseStringData;
   Kwp71Command m_pendingCmd;
   bool m_responseReadSuccess;
@@ -79,6 +88,6 @@ private:
   void processReceivedPacket();
   bool slowInit(uint8_t address, int databits, int parity);
   void commLoop();
-  static void threadEntry(Kwp71Interface* iface);
+  static void threadEntry(Kwp71* iface);
 };
 

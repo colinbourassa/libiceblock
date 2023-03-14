@@ -1,4 +1,4 @@
-#include "kwp71interface.h"
+#include "kwp71.h"
 #include <libftdi1/ftdi.h>
 #include <iostream>
 #include <iomanip>
@@ -10,14 +10,26 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-Kwp71Interface::Kwp71Interface(std::string device, uint8_t addr) :
+Kwp71Version Kwp71::getLibraryVersion()
+{
+  Kwp71Version ver;
+
+  ver.major = KWP71_VER_MAJOR;
+  ver.minor = KWP71_VER_MINOR;
+  ver.patch = KWP71_VER_PATCH;
+
+  return ver;
+}
+
+Kwp71::Kwp71(std::string device, uint8_t addr) :
   m_ecuAddr(addr),
   m_shutdown(false),
   m_deviceName(device),
   m_fd(-1),
   m_lastUsedSeqNum(0),
   m_readyForCommand(true),
-  m_receivingData(false)
+  m_receivingData(false),
+  m_responseReadSuccess(false)
 {
   m_ifThread = std::thread(threadEntry, this);
 }
@@ -25,7 +37,7 @@ Kwp71Interface::Kwp71Interface(std::string device, uint8_t addr) :
 /**
  * Opens and sets up the serial port device.
  */
-bool Kwp71Interface::openSerialPort()
+bool Kwp71::openSerialPort()
 {
 #if defined(linux)
   struct termios newtio;
@@ -152,7 +164,7 @@ bool Kwp71Interface::openSerialPort()
 /**
  * Closes the serial port device.
  */
-void Kwp71Interface::closeDevice()
+void Kwp71::closeDevice()
 {
   close(m_fd);
 }
@@ -161,7 +173,7 @@ void Kwp71Interface::closeDevice()
  * Shuts down the connection and waits for the connection thread to
  * finish.
  */
-void Kwp71Interface::shutdown()
+void Kwp71::shutdown()
 {
   m_shutdown = true;
   m_ifThread.join();
@@ -174,7 +186,7 @@ void Kwp71Interface::shutdown()
  * Returns true if every byte (except the last) is met with a bitwise
  * inversion of that byte in response from the ECU; false otherwise.
  */
-bool Kwp71Interface::sendPacket()
+bool Kwp71::sendPacket()
 {
   bool status = true;
   uint8_t index = 0;
@@ -208,7 +220,7 @@ bool Kwp71Interface::sendPacket()
  * its bitwise inversion. Returns true if all the expected bytes are received,
  * false otherwise.
  */
-bool Kwp71Interface::recvPacket(Kwp71PacketType& type)
+bool Kwp71::recvPacket(Kwp71PacketType& type)
 {
   bool status = true;
   uint8_t index = 1;
@@ -256,7 +268,7 @@ bool Kwp71Interface::recvPacket(Kwp71PacketType& type)
 /**
  * Populates a local buffer with the contents of a packet to be transmitted.
  */
-bool Kwp71Interface::populatePacket(bool usePendingCommand)
+bool Kwp71::populatePacket(bool usePendingCommand)
 {
   bool status = false;
   Kwp71PacketType type;
@@ -420,7 +432,7 @@ bool slowInit(uint8_t address, int databits, int parity)
  * immediately after the 5-baud slow init, and replies with the bitwise
  * inversion of the third byte as an acknowledgement.
  */
-bool Kwp71Interface::readAckKeywordBytes()
+bool Kwp71::readAckKeywordBytes()
 {
   bool status = false;
   uint8_t kwpBytes[3];
@@ -461,7 +473,7 @@ bool Kwp71Interface::readAckKeywordBytes()
  * Queues a command to read the ID information from the ECU, which is returned
  * as a collection of strings.
  */
-bool Kwp71Interface::requestIDInfo(std::vector<std::string>& idResponse)
+bool Kwp71::requestIDInfo(std::vector<std::string>& idResponse)
 {
   // wait until any previous command has been fully processed
   std::unique_lock<std::mutex> lock(m_responseMutex);
@@ -475,6 +487,7 @@ bool Kwp71Interface::requestIDInfo(std::vector<std::string>& idResponse)
   if (m_responseReadSuccess)
   {
     idResponse = m_responseStringData;
+    m_responseStringData.clear();
   }
 
   return m_responseReadSuccess;
@@ -484,7 +497,7 @@ bool Kwp71Interface::requestIDInfo(std::vector<std::string>& idResponse)
  * Queues a command to be sent to the ECU at the next opportunity, and waits
  * to receive the response.
  */
-bool Kwp71Interface::sendCommand(Kwp71Command cmd, std::vector<uint8_t>& response)
+bool Kwp71::sendCommand(Kwp71Command cmd, std::vector<uint8_t>& response)
 {
   // wait until any previous command has been fully processed
   std::unique_lock<std::mutex> lock(m_responseMutex);
@@ -496,7 +509,8 @@ bool Kwp71Interface::sendCommand(Kwp71Command cmd, std::vector<uint8_t>& respons
   m_responseCondVar.wait(lock);
   if (m_responseReadSuccess)
   {
-    response = m_response;
+    response = m_responseBinaryData;
+    m_responseBinaryData.clear();
   }
 
   return m_responseReadSuccess;
@@ -506,7 +520,7 @@ bool Kwp71Interface::sendCommand(Kwp71Command cmd, std::vector<uint8_t>& respons
  * Parses the data in the received packet buffer and takes the appropriate
  * action to package and return the data.
  */
-void Kwp71Interface::processReceivedPacket()
+void Kwp71::processReceivedPacket()
 {
   const Kwp71PacketType type = (Kwp71PacketType)(m_recvPacketBuf[2]);
   const uint8_t payloadLen = m_recvPacketBuf[0] - 3;
@@ -525,9 +539,9 @@ void Kwp71Interface::processReceivedPacket()
   case Kwp71PacketType::ROMContent:
   case Kwp71PacketType::EEPROMContent:
   case Kwp71PacketType::ParametricData:
-    m_response.insert(m_response.end(),
-                      &m_recvPacketBuf[3],
-                      &m_recvPacketBuf[3 + payloadLen]);
+    m_responseBinaryData.insert(m_responseBinaryData.end(),
+                                &m_recvPacketBuf[3],
+                                &m_recvPacketBuf[3 + payloadLen]);
     break;
   }
 }
@@ -535,7 +549,7 @@ void Kwp71Interface::processReceivedPacket()
 /**
  * Thread entry point, which calls the main communication loop function.
  */
-void Kwp71Interface::threadEntry(Kwp71Interface* iface)
+void Kwp71::threadEntry(Kwp71* iface)
 {
   iface->commLoop();
 }
@@ -544,7 +558,7 @@ void Kwp71Interface::threadEntry(Kwp71Interface* iface)
  * Loop that maintains a connection with the ECU. When no particular
  * command is queued, the empty/ACK (09) command is sent as a keepalive.
  */
-void Kwp71Interface::commLoop()
+void Kwp71::commLoop()
 {
   bool connectionAlive = false;
 
