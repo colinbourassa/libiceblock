@@ -3,8 +3,7 @@
 #include <iostream>
 #include <iomanip>
 #include <chrono>
-#include <semaphore>
-
+#include <mutex>
 #include <termios.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -12,14 +11,15 @@
 #include <fcntl.h>
 
 Kwp71Interface::Kwp71Interface(std::string device, uint8_t addr) :
+  m_ecuAddr(addr),
   m_shutdown(false),
   m_deviceName(device),
   m_fd(-1),
   m_lastUsedSeqNum(0),
-  m_cmdSemaphore({1}),
-  m_responseSemaphore({0})
+  m_readyForCommand(true),
+  m_receivingData(false)
 {
-  m_ifThread = std::thread(commLoop, this, &m_shutdown, addr);
+  m_ifThread = std::thread(threadEntry, this);
 }
 
 /**
@@ -227,6 +227,7 @@ bool Kwp71Interface::recvPacket(Kwp71PacketType& type)
         std::cout << " " << m_recvPacketBuf[index];
         if (index < m_recvPacketBuf[0])
         {
+          std::this_thread::sleep_for(std::chrono::milliseconds(5));
           ack = ~(m_recvPacketBuf[index]);
           status =
             (write(m_fd, &ack, 1) == 1) &&
@@ -255,10 +256,22 @@ bool Kwp71Interface::recvPacket(Kwp71PacketType& type)
 /**
  * Populates a local buffer with the contents of a packet to be transmitted.
  */
-bool Kwp71Interface::populatePacket(Kwp71PacketType type,
-                                    const std::vector<uint8_t>& payload)
+bool Kwp71Interface::populatePacket(bool usePendingCommand)
 {
   bool status = false;
+  Kwp71PacketType type;
+  std::vector<uint8_t> payload;
+
+  if (usePendingCommand)
+  {
+    type = m_pendingCmd.type;
+    payload = m_pendingCmd.payload;
+  }
+  else
+  {
+    type = Kwp71PacketType::Empty;
+    payload = {};
+  }
 
   switch (type)
   {
@@ -420,6 +433,7 @@ bool Kwp71Interface::readAckKeywordBytes()
     {
       // write the bitwise inversion to acknowledge, and read it
       // back to to clear the rx buffer
+      std::this_thread::sleep_for(std::chrono::milliseconds(5));
       kwpBytes[2] = ~(kwpBytes[2]);
       if (write(m_fd, &kwpBytes[2], 1) &&
           read(m_fd, &kwpBytes[2], 1))
@@ -443,38 +457,49 @@ bool Kwp71Interface::readAckKeywordBytes()
   return status;
 }
 
-std::vector<std::string> Kwp71Interface::requestIDInfo()
+/**
+ * Queues a command to read the ID information from the ECU, which is returned
+ * as a collection of strings.
+ */
+bool Kwp71Interface::requestIDInfo(std::vector<std::string>& idResponse)
 {
-  // wait until any previous pending command has been fully processed
-  m_cmdSemaphore.acquire();
+  // wait until any previous command has been fully processed
+  std::unique_lock<std::mutex> lock(m_responseMutex);
 
-  cmd.type = Kwp71PacketType::RequestID;
+  m_pendingCmd.type = Kwp71PacketType::RequestID;
+  m_pendingCmd.payload = std::vector<uint8_t>();
 
   // wait until the response from this command has been completely received
-  m_responseSemaphore.acquire();
-  std::vector<std::string> responseData(m_responseStringData);
-  m_responseStringData.clear();
+  std::cout << "Command sender waiting for response..." << std::endl;
+  m_responseCondVar.wait(lock);
+  if (m_responseReadSuccess)
+  {
+    idResponse = m_responseStringData;
+  }
 
-  return responseData;
+  return m_responseReadSuccess;
 }
 
 /**
  * Queues a command to be sent to the ECU at the next opportunity, and waits
  * to receive the response.
  */
-std::vector<uint8_t> Kwp71Interface::sendCommand(Kwp71Command cmd)
+bool Kwp71Interface::sendCommand(Kwp71Command cmd, std::vector<uint8_t>& response)
 {
-  // wait until any previous pending command has been fully processed
-  m_cmdSemaphore.acquire();
+  // wait until any previous command has been fully processed
+  std::unique_lock<std::mutex> lock(m_responseMutex);
 
   m_pendingCmd = cmd;
 
   // wait until the response from this command has been completely received
-  m_responseSemaphore.acquire();
-  std::vector<uint8_t> responseData(m_response);
-  m_response.clear();
+  std::cout << "Command sender waiting for response..." << std::endl;
+  m_responseCondVar.wait(lock);
+  if (m_responseReadSuccess)
+  {
+    response = m_response;
+  }
 
-  return responseData;
+  return m_responseReadSuccess;
 }
 
 /**
@@ -492,7 +517,7 @@ void Kwp71Interface::processReceivedPacket()
   case Kwp71PacketType::Snapshot:
     break;
   case Kwp71PacketType::ASCIIString:
-    m_responseStringData.push_back(std::string(m_recvPacketBuf[3], payloadLen);
+    m_responseStringData.push_back(std::string(m_recvPacketBuf[3], payloadLen));
     break;
   case Kwp71PacketType::DACValue:
   case Kwp71PacketType::BinaryData:
@@ -500,91 +525,91 @@ void Kwp71Interface::processReceivedPacket()
   case Kwp71PacketType::ROMContent:
   case Kwp71PacketType::EEPROMContent:
   case Kwp71PacketType::ParametricData:
-    m_response.push_back(&m_recvPacketBuf[3], &m_recvPacketBuf[3] + payloadLen);
+    m_response.insert(m_response.end(),
+                      &m_recvPacketBuf[3],
+                      &m_recvPacketBuf[3 + payloadLen]);
     break;
   }
 }
 
 /**
- * Loops, collecting data from packets sent by the ECU until an ACK/empty
- * packet is sent (indicating that the ECU is done sending that sequence
- * of data. Returns true when an ACK/empty packet was ultimately received
- * from the ECU; false if the connection timed out or was shut down.
+ * Thread entry point, which calls the main communication loop function.
  */
-bool Kwp71Interface::collectResponsePackets()
+void Kwp71Interface::threadEntry(Kwp71Interface* iface)
 {
-  Kwp71PacketType type;
-  bool status = true;
-  do
-  {
-    if (recvPacket(type))
-    {
-      processReceivedPacket();
-    }
-    else
-    {
-      status = false;
-    }
-  } while ((type != Kwp71PacketType::Empty) && status && !m_shutdown);
-
-  return (status && !m_shutdown);
+  iface->commLoop();
 }
 
 /**
  * Loop that maintains a connection with the ECU. When no particular
  * command is queued, the empty/ACK (09) command is sent as a keepalive.
  */
-void Kwp71Interface::commLoop(Kwp71Interface* iface, bool* shutdown, uint8_t addr)
+void Kwp71Interface::commLoop()
 {
   bool connectionAlive = false;
 
-  while (!shutdown)
+  while (!m_shutdown)
   {
     // loop until the initialization sequence has completed,
     // re-attempting the 5-baud slow init if necessary
-    while (!connectionAlive && !shutdown)
+    while (!connectionAlive && !m_shutdown)
     {
-      iface->slowInit(addr, 7, 0);
-      if (iface->openSerialPort())
+      slowInit(m_ecuAddr, 7, 0);
+      if (openSerialPort())
       {
-        connectionAlive = iface->readAckKeywordBytes();
+        connectionAlive = readAckKeywordBytes();
       }
     }
 
-    // the ECU is expected to send its ID info unsolicited here
-    if (iface->collectResponsePackets())
-    {
-      // TODO
-    }
+    Kwp71PacketType recvType;
 
-    // continue taking turns with the ECU, transmitting one
-    // packet per turn
-    while (connectionAlive && !shutdown)
+    // TODO: the ECU might send its ID info unsolicited here;
+    // be prepared to receive it (possibly by moving the send()
+    // routine to the bottom of the main loop)
+
+    // continue taking turns with the ECU, sending one packet per turn
+    while (connectionAlive && !m_shutdown)
     {
-      if (iface->collectResponsePackets())
+      // the readyForCommand flag is only set when the ECU is simply
+      // sending empty ACK packets, waiting for us to send a command
+      populatePacket(m_readyForCommand);
+      sendPacket();
+ 
+      if (recvPacket(recvType))
       {
-        iface->m_responseSemaphore.release();
+        if (recvType == Kwp71PacketType::Empty)
+        {
+          m_readyForCommand = true;
+          if (m_receivingData)
+          {
+            m_receivingData = false;
+            m_responseReadSuccess = true;
+            m_responseCondVar.notify_one();
+          }
+        }
+        else
+        {
+          m_readyForCommand = false;
+          m_receivingData = true;
+        }
       }
       else
       {
-        std::cerr << "ECU didn't respond during its turn; connection has died" << std::endl;
+        if (m_receivingData)
+        {
+          m_receivingData = false;
+          m_responseReadSuccess = false;
+          m_responseCondVar.notify_one();
+        }
+        std::cerr << "ECU didn't respond during its turn" << std::endl;
         connectionAlive = false;
       }
-
-      iface->populatePacket(m_pendingCmd.type, m_pendingCmd.payload);
-      iface->sendPacket();
     }
 
     if (!connectionAlive)
     {
-      iface->closeDevice();
+      closeDevice();
     }
-  }
-
-  if (connectionAlive)
-  {
-    iface->populatePacket(Kwp71PacketType::Disconnect, std::vector<uint8_t>());
-    iface->sendPacket();
   }
 }
 

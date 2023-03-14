@@ -3,6 +3,7 @@
 #include <thread>
 #include <vector>
 #include <queue>
+#include <condition_variable>
 #include <stdint.h>
 
 enum class Kwp71PacketType
@@ -45,10 +46,11 @@ class Kwp71Interface
 public:
   Kwp71Interface(std::string device, uint8_t addr);
   void shutdown();
-  std::vector<std::string> requestIDInfo();
-  std::vector<uint8_t> sendCommand(Kwp71Command cmd);
+  bool requestIDInfo(std::vector<std::string>& idResponse);
+  bool sendCommand(Kwp71Command cmd, std::vector<uint8_t>& response);
 
 private:
+  uint8_t m_ecuAddr;
   bool m_shutdown;
   std::thread m_ifThread;
   std::string m_deviceName;
@@ -56,15 +58,19 @@ private:
   uint8_t m_lastUsedSeqNum;
   uint8_t m_sendPacketBuf[256];
   uint8_t m_recvPacketBuf[256];
+
+  bool m_readyForCommand;
+  bool m_receivingData;
   std::vector<uint8_t> m_response;
   std::vector<std::string> m_responseStringData;
-  std::binary_semaphore m_cmdSemaphore;
   Kwp71Command m_pendingCmd;
+  bool m_responseReadSuccess;
+  std::condition_variable m_responseCondVar;
+  std::mutex m_responseMutex;
+
   static constexpr uint8_t s_endOfPacket = 0x03;
 
-  bool collectResponsePackets();
-  bool populatePacket(Kwp71PacketType type,
-                      const std::vector<uint8_t>& payload);
+  bool populatePacket(bool usePendingCommand);
   bool openSerialPort();
   bool readAckKeywordBytes();
   void closeDevice();
@@ -72,6 +78,7 @@ private:
   bool recvPacket(Kwp71PacketType& type);
   void processReceivedPacket();
   bool slowInit(uint8_t address, int databits, int parity);
-  static void commLoop(Kwp71Interface* iface, bool* shutdown, uint8_t addr);
+  void commLoop();
+  static void threadEntry(Kwp71Interface* iface);
 };
 
