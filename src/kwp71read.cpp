@@ -23,9 +23,29 @@ int main(int argc, char** argv)
   }
 
   addr = strtoul(argv[2], NULL, 0);
-  Kwp71 kwp(std::string(argv[1]), addr);
-  std::cout << "Calling connect()..." << std::endl;
-  kwp.connect();
+  Kwp71 kwp;
+  std::cout << "Calling connect(" << argv[1] << ", " << addr << ")..." << std::endl;
+  if (kwp.connect(std::string(argv[1]), addr))
+  {
+    std::vector<std::string> idResponse;
+    if (kwp.requestIDInfo(idResponse))
+    {
+      std::cout << "--- ID info ---" << std::endl;
+      for (int i = 0; i < idResponse.size(); i++)
+      {
+        std::cout << idResponse[i] << std::endl;
+      }
+      std::cout << "---------------" << std::endl;
+    }
+    else
+    {
+      std::cout << "requestIDInfo() failed" << std::endl;
+    }
+  }
+  else
+  {
+    std::cout << "connect() failed" << std::endl;
+  }
   std::cout << "Calling shutdown()..." << std::endl;
   kwp.shutdown();
 

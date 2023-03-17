@@ -52,8 +52,8 @@ struct Kwp71Version
 class Kwp71
 {
 public:
-  Kwp71(std::string device, uint8_t addr);
-  bool connect();
+  Kwp71();
+  bool connect(std::string device, uint8_t addr);
   void shutdown();
   bool requestIDInfo(std::vector<std::string>& idResponse);
   bool sendCommand(Kwp71Command cmd, std::vector<uint8_t>& response);
@@ -78,6 +78,7 @@ private:
   bool m_responseReadSuccess;
   std::condition_variable m_responseCondVar;
   std::mutex m_responseMutex;
+  std::mutex m_connectMutex;
 
   static constexpr uint8_t s_endOfPacket = 0x03;
 

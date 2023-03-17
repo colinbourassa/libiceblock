@@ -21,11 +21,11 @@ Kwp71Version Kwp71::getLibraryVersion()
   return ver;
 }
 
-Kwp71::Kwp71(std::string device, uint8_t addr) :
+Kwp71::Kwp71() :
   m_connectionActive(false),
-  m_ecuAddr(addr),
+  m_ecuAddr(0),
   m_shutdown(false),
-  m_deviceName(device),
+  m_deviceName(""),
   m_fd(-1),
   m_lastUsedSeqNum(0),
   m_readyForCommand(true),
@@ -34,13 +34,36 @@ Kwp71::Kwp71(std::string device, uint8_t addr) :
 {
 }
 
-bool Kwp71::connect()
+/**
+ * Performs the slow init sequence using the provided ECU address and then
+ * opens the serial port device, using it to read the ECU's keyword bytes.
+ * Returns true if all of this is successful; false otherwise.
+ */
+bool Kwp71::connect(std::string device, uint8_t addr)
 {
-  m_ifThread = std::thread(threadEntry, this);
-  // TODO: block until the 5-baud init has been completed, the serial port
-  // has been opened, and the connection to the ECU is active. Return true
-  // if all of that was successful; false otherwise.
-  return false;
+  bool status = false;
+  std::unique_lock<std::mutex> lock(m_connectMutex);
+
+  if (!m_ifThread.joinable())
+  {
+    m_ecuAddr = addr;
+    m_deviceName = device;
+    m_connectionActive = false;
+
+    // TODO: can we attempt to open/configure the serial port before we
+    // do the slow init sequence? That would allow us to exit early with
+    // failure before attempting the 5-baud stuff.
+    if (slowInit(m_ecuAddr, 7, 0) &&
+        openSerialPort() &&
+        readAckKeywordBytes())
+    {
+      m_connectionActive = true;
+      m_ifThread = std::thread(threadEntry, this);
+      status = true;
+    }
+  }
+
+  return status;
 }
 
 /**
