@@ -55,7 +55,7 @@ else()
   add_library (kwp71 SHARED ${SOURCE_SUBDIR}/kwp71.cpp)
 endif()
 
-target_link_libraries (kwp71 ftdi1)
+target_link_libraries (kwp71 usb ftdi1)
 
 add_executable (kwp71read ${SOURCE_SUBDIR}/kwp71read.cpp)
 

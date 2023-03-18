@@ -9,6 +9,9 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <string.h>
+#include <errno.h>
+#include <libusb-1.0/libusb.h>
 
 Kwp71Version Kwp71::getLibraryVersion()
 {
@@ -50,10 +53,7 @@ bool Kwp71::connect(std::string device, uint8_t addr)
     m_deviceName = device;
     m_connectionActive = false;
 
-    // TODO: can we attempt to open/configure the serial port before we
-    // do the slow init sequence? That would allow us to exit early with
-    // failure before attempting the 5-baud stuff.
-    if (slowInit(m_ecuAddr, 7, 0) &&
+    if (slowInit(m_ecuAddr, 8, 0) &&
         openSerialPort() &&
         readAckKeywordBytes())
     {
@@ -102,11 +102,11 @@ bool Kwp71::openSerialPort()
 
       // when waiting for responses, wait until we haven't received any
       // characters for a period of time before returning with failure
-      newtio.c_cc[VTIME] = 1;
+      newtio.c_cc[VTIME] = 2;
       newtio.c_cc[VMIN] = 0;
 
-      cfsetispeed(&newtio, B9600);
-      cfsetospeed(&newtio, B9600);
+      cfsetispeed(&newtio, B4800);
+      cfsetospeed(&newtio, B4800);
 
       // attempt to set the termios parameters
       std::cout << "Setting serial port parameters..." << std::endl;
@@ -150,7 +150,7 @@ bool Kwp71::openSerialPort()
     if (GetCommState(m_fd, &dcb) == TRUE)
     {
       // set the serial port parameters
-      dcb.BaudRate = 9600;
+      dcb.BaudRate = 4800;
       dcb.fParity = FALSE;
       dcb.fOutxCtsFlow = FALSE;
       dcb.fOutxDsrFlow = FALSE;
@@ -207,9 +207,16 @@ void Kwp71::closeDevice()
  */
 void Kwp71::shutdown()
 {
-  m_shutdown = true;
-  m_ifThread.join();
+  if (m_ifThread.joinable())
+  {
+    std::cout << "setting m_shutdown" << std::endl;
+    m_shutdown = true;
+    std::cout << "calling m_ifThread.join()" << std::endl;
+    m_ifThread.join();
+  }
+  std::cout << "calling closeDevice()" << std::endl;
   closeDevice();
+  std::cout << "returning from shutdown()" << std::endl;
 }
 
 bool Kwp71::isConnectionActive() const
@@ -266,21 +273,45 @@ bool Kwp71::recvPacket(Kwp71PacketType& type)
 
   if (read(m_fd, &m_recvPacketBuf[0], 1) == 1)
   {
-    std::cout << "Received pkt length byte: " << std::hex << m_recvPacketBuf[0] << std::dec << std::endl;
+    printf("Received pkt length byte: %02X\n", m_recvPacketBuf[0]);
+
+    // ack the pkt length byte
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    ack = ~(m_recvPacketBuf[0]);
+    printf("send ack: %02X\n", ack);
+    status = (write(m_fd, &ack, 1) == 1);
+    if (read(m_fd, &loopback, 1) == 1)
+    {
+      printf("recv (loopback): %02X\n", loopback);
+    }
+    else
+    {
+      status = false;
+      printf("read() timeout when attempting to read loopback byte\n");
+    }
+
     while (status && (index < m_recvPacketBuf[0]))
     {
-      std::cout << "Receiving pkt content:" << std::setfill('0') <<
-        std::setw(2) << std::right << std::hex;
       if (read(m_fd, &m_recvPacketBuf[index], 1) == 1)
       {
-        std::cout << " " << m_recvPacketBuf[index];
+        printf("recv: %02X\n", m_recvPacketBuf[index]);
+
+        // every byte except the last in the packet is ack'd
         if (index < m_recvPacketBuf[0])
         {
           std::this_thread::sleep_for(std::chrono::milliseconds(5));
           ack = ~(m_recvPacketBuf[index]);
-          status =
-            (write(m_fd, &ack, 1) == 1) &&
-            (read(m_fd, &loopback, 1) == 1);
+          printf("send ack: %02X\n", ack);
+          status = (write(m_fd, &ack, 1) == 1);
+          if (read(m_fd, &loopback, 1) == 1)
+          {
+            printf("recv (loopback): %02X\n", loopback);
+          }
+          else
+          {
+            status = false;
+            printf("read() timeout when attempting to read loopback byte\n");
+          }
         }
       }
       else
@@ -290,8 +321,6 @@ bool Kwp71::recvPacket(Kwp71PacketType& type)
       }
     }
   }
-
-  std::cout << std::dec;
 
   if (status)
   {
@@ -370,6 +399,23 @@ bool Kwp71::populatePacket(bool usePendingCommand)
   }
 
   return status;
+}
+
+void libftdireset()
+{
+  libusb_context* context = NULL;
+  libusb_device_handle* dev_handle = NULL;
+  int rc = libusb_init(&context);
+
+  dev_handle = libusb_open_device_with_vid_pid(context, 0x0403, 0x6001);
+  if (libusb_kernel_driver_active(dev_handle, 0))
+  {
+    rc = libusb_detach_kernel_driver(dev_handle, 0);
+  }
+  libusb_reset_device(dev_handle);
+  libusb_attach_kernel_driver(dev_handle, 0);
+  libusb_close(dev_handle);
+  libusb_exit(context);
 }
 
 /**
@@ -452,6 +498,8 @@ bool Kwp71::slowInit(uint8_t address, int databits, int parity)
     }
 
     ftdi_usb_close(&ftdic);
+
+    libftdireset();
   }
   else
   {
@@ -472,35 +520,37 @@ bool Kwp71::slowInit(uint8_t address, int databits, int parity)
 bool Kwp71::readAckKeywordBytes()
 {
   bool status = false;
-  uint8_t kwpBytes[3];
+  uint8_t kwpBytes[3] = { 0, 0, 0 };
+  int byteCount = 0;
 
-  if (read(m_fd, kwpBytes, 3) == 3)
+  for (int byteCount = 0; byteCount < 3; byteCount++)
   {
-    if ((kwpBytes[0] == 0x55) &&
-        (kwpBytes[1] == 0x00) && 
-        (kwpBytes[2] == 0x81))
+    if (read(m_fd, &kwpBytes[byteCount], 1) == 1)
     {
-      // write the bitwise inversion to acknowledge, and read it
-      // back to to clear the rx buffer
-      std::this_thread::sleep_for(std::chrono::milliseconds(5));
-      kwpBytes[2] = ~(kwpBytes[2]);
-      if (write(m_fd, &kwpBytes[2], 1) &&
-          read(m_fd, &kwpBytes[2], 1))
-      {
-        status = true;
-      }
+      printf("read byte: %02X\n", kwpBytes[byteCount]);
     }
-    else
+  }
+
+  if ((kwpBytes[0] == 0x55) &&
+      (kwpBytes[1] == 0x00) && 
+      (kwpBytes[2] == 0x81))
+  {
+    // write the bitwise inversion to acknowledge, and read it
+    // back to to clear the rx buffer
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    kwpBytes[2] = ~(kwpBytes[2]);
+    if (write(m_fd, &kwpBytes[2], 1) &&
+        read(m_fd, &kwpBytes[2], 1))
     {
-      std::cerr << "Keyword bytes (" << std::setfill('0') <<
-        std::setw(2) << std::right << std::hex <<
-        kwpBytes[0] << " " << kwpBytes[1] << " " << kwpBytes[2] <<
-        ") did not match expected" << std::dec << std::endl;
+      status = true;
     }
   }
   else
   {
-    std::cerr << "Failed to read 3 bytes of keyword protocol ID" << std::endl;
+    std::cerr << "Keyword bytes (" << std::setfill('0') <<
+      std::setw(2) << std::right << std::hex <<
+      kwpBytes[0] << " " << kwpBytes[1] << " " << kwpBytes[2] <<
+      ") did not match expected" << std::dec << std::endl;
   }
 
   return status;
@@ -597,17 +647,16 @@ void Kwp71::threadEntry(Kwp71* iface)
  */
 void Kwp71::commLoop()
 {
+  std::cout << "(thread) entering commLoop" << std::endl;
   while (!m_shutdown)
   {
     // loop until the initialization sequence has completed,
     // re-attempting the 5-baud slow init if necessary
     while (!m_connectionActive && !m_shutdown)
     {
-      slowInit(m_ecuAddr, 7, 0);
+      std::cout << "(thread) starting connection attempt loop" << std::endl;
+      slowInit(m_ecuAddr, 8, 0);
 
-      // TODO: can we attempt to open/configure the serial port before we
-      // do the slow init sequence? That would allow us to exit early with
-      // failure before attempting the 5-baud stuff.
       if (openSerialPort())
       {
         m_connectionActive = readAckKeywordBytes();
@@ -617,21 +666,16 @@ void Kwp71::commLoop()
         std::cerr << "Error opening serial device '" << m_deviceName << "'" << std::endl;
       }
     }
+    std::cout << "(thread) done with connection attempt loop" << std::endl;
 
     Kwp71PacketType recvType;
 
-    // TODO: the ECU might send its ID info unsolicited here;
-    // be prepared to receive it (possibly by moving the send()
-    // routine to the bottom of the main loop)
+    // The ECU apparently sends its ID info unsolicited next; this is why we
+    // start the next loop with a receive operation.
 
     // continue taking turns with the ECU, sending one packet per turn
     while (m_connectionActive && !m_shutdown)
     {
-      // the readyForCommand flag is only set when the ECU is simply
-      // sending empty ACK packets, waiting for us to send a command
-      populatePacket(m_readyForCommand);
-      sendPacket();
- 
       if (recvPacket(recvType))
       {
         if (recvType == Kwp71PacketType::Empty)
@@ -661,6 +705,11 @@ void Kwp71::commLoop()
         std::cerr << "ECU didn't respond during its turn" << std::endl;
         m_connectionActive = false;
       }
+
+      // the readyForCommand flag is only set when the ECU is simply
+      // sending empty ACK packets, waiting for us to send a command
+      populatePacket(m_readyForCommand);
+      sendPacket();
     }
 
     if (!m_connectionActive)
@@ -668,5 +717,6 @@ void Kwp71::commLoop()
       closeDevice();
     }
   }
+  std::cout << "(thread) exiting commLoop" << std::endl;
 }
 
