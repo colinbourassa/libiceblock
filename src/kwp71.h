@@ -2,9 +2,10 @@
 #include <cstring>
 #include <thread>
 #include <vector>
-#include <queue>
+#include <chrono>
 #include <condition_variable>
 #include <stdint.h>
+#include <libftdi1/ftdi.h>
 #include "kwp71_version.h"
 
 enum class Kwp71PacketType
@@ -53,7 +54,7 @@ class Kwp71
 {
 public:
   Kwp71();
-  bool connect(std::string device, uint8_t addr);
+  bool connect(uint8_t addr);
   void shutdown();
   bool requestIDInfo(std::vector<std::string>& idResponse);
   bool sendCommand(Kwp71Command cmd, std::vector<uint8_t>& response);
@@ -65,7 +66,6 @@ private:
   bool m_shutdown;
   std::thread m_ifThread;
   std::string m_deviceName;
-  int m_fd;
   uint8_t m_lastUsedSeqNum;
   uint8_t m_sendPacketBuf[256];
   uint8_t m_recvPacketBuf[256];
@@ -80,18 +80,25 @@ private:
   std::mutex m_responseMutex;
   std::mutex m_connectMutex;
 
+  struct ftdi_context m_ftdi;
+
   static constexpr uint8_t s_endOfPacket = 0x03;
 
+  bool waitForByteSequence(const std::vector<uint8_t>& sequence,
+                           std::chrono::milliseconds timeout);
   bool isConnectionActive() const;
   bool populatePacket(bool usePendingCommand);
-  bool openSerialPort();
   bool readAckKeywordBytes();
-  void closeDevice();
+  bool setFtdiSerialProperties();
+  void closeFtdi();
   bool sendPacket();
   bool recvPacket(Kwp71PacketType& type);
   void processReceivedPacket();
   bool slowInit(uint8_t address, int databits, int parity);
   void commLoop();
   static void threadEntry(Kwp71* iface);
+
+  bool readSerial(uint8_t* buf, int count);
+  bool writeSerial(uint8_t* buf, int count);
 };
 

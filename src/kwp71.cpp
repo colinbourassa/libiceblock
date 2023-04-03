@@ -1,5 +1,4 @@
 #include "kwp71.h"
-#include <libftdi1/ftdi.h>
 #include <iostream>
 #include <iomanip>
 #include <chrono>
@@ -11,7 +10,6 @@
 #include <fcntl.h>
 #include <string.h>
 #include <errno.h>
-#include <libusb-1.0/libusb.h>
 
 Kwp71Version Kwp71::getLibraryVersion()
 {
@@ -28,8 +26,6 @@ Kwp71::Kwp71() :
   m_connectionActive(false),
   m_ecuAddr(0),
   m_shutdown(false),
-  m_deviceName(""),
-  m_fd(-1),
   m_lastUsedSeqNum(0),
   m_readyForCommand(true),
   m_receivingData(false),
@@ -42,163 +38,42 @@ Kwp71::Kwp71() :
  * opens the serial port device, using it to read the ECU's keyword bytes.
  * Returns true if all of this is successful; false otherwise.
  */
-bool Kwp71::connect(std::string device, uint8_t addr)
+bool Kwp71::connect(uint8_t addr)
 {
   bool status = false;
   std::unique_lock<std::mutex> lock(m_connectMutex);
 
   if (!m_ifThread.joinable())
   {
-    m_ecuAddr = addr;
-    m_deviceName = device;
-    m_connectionActive = false;
-
-    if (slowInit(m_ecuAddr, 8, 0) &&
-        openSerialPort() &&
-        readAckKeywordBytes())
+    if ((ftdi_init(&m_ftdi) == 0) &&
+        (ftdi_set_interface(&m_ftdi, INTERFACE_A) == 0))
     {
-      m_connectionActive = true;
-      m_ifThread = std::thread(threadEntry, this);
-      status = true;
+      m_ecuAddr = addr;
+      m_connectionActive = false;
+
+      if ((ftdi_usb_open(&m_ftdi, 0x0403, 0x6001) == 0))
+      {
+        printf("-- ftdi_usb_open() success\n");
+        if (slowInit(m_ecuAddr, 8, 0))
+        {
+          printf("-- slowInit() success\n");
+          if (setFtdiSerialProperties())
+          {
+            printf("-- setFtdiSerialProperties() success\n");
+            if (readAckKeywordBytes())
+            {
+              printf("-- readAckKeywordBytes() success\n");
+              m_connectionActive = true;
+              m_ifThread = std::thread(threadEntry, this);
+              status = true;
+            }
+          }
+        }
+      }
     }
   }
 
   return status;
-}
-
-/**
- * Opens and sets up the serial port device.
- */
-bool Kwp71::openSerialPort()
-{
-#if defined(linux)
-  struct termios newtio;
-  bool success = true;
-
-  std::cout << "Opening the serial device (" << m_deviceName << ")..." << std::endl;
-  m_fd = open(m_deviceName.c_str(), O_RDWR | O_NOCTTY);
-
-  if (m_fd > 0)
-  {
-    std::cout << "Opened device successfully." << std::endl;
-
-    if (tcgetattr(m_fd, &newtio) != 0)
-    {
-      std::cerr << "Unable to read serial port parameters." << std::endl;
-      success = false;
-    }
-
-    if (success)
-    {
-      // set up the serial port:
-      // * enable the receiver, set 8-bit fields, set local mode, disable hardware flow control
-      // * set non-canonical mode, disable echos, disable signals
-      // * disable all special handling of CR or LF, disable all software flow control
-      // * disable all output post-processing
-      newtio.c_cflag &= ((CREAD | CS8 | CLOCAL) & ~(CRTSCTS));
-      newtio.c_lflag &= ~(ICANON | ECHO | ECHOE | ISIG);
-      newtio.c_iflag &= ~(INLCR | ICRNL | IGNCR | IXON | IXOFF | IXANY);
-      newtio.c_oflag &= ~OPOST;
-
-      // when waiting for responses, wait until we haven't received any
-      // characters for a period of time before returning with failure
-      newtio.c_cc[VTIME] = 2;
-      newtio.c_cc[VMIN] = 0;
-
-      cfsetispeed(&newtio, B4800);
-      cfsetospeed(&newtio, B4800);
-
-      // attempt to set the termios parameters
-      std::cout << "Setting serial port parameters..." << std::endl;
-
-      // flush the serial buffers and set the new parameters
-      if ((tcflush(m_fd, TCIFLUSH) != 0) ||
-          (tcsetattr(m_fd, TCSANOW, &newtio) != 0))
-      {
-        std::cerr << "Failure setting up port" << std::endl;
-        close(m_fd);
-        success = false;
-      }
-    }
-
-    // close the device if it couldn't be configured
-    if (!success)
-    {
-      close(m_fd);
-    }
-  }
-  else // open() returned failure
-  {
-    std::cerr << "Error opening device (" << m_deviceName << ")" << std::endl;
-  }
-
-#elif defined(WIN32)
-
-  DCB dcb;
-  COMMTIMEOUTS commTimeouts;
-
-  // attempt to open the device
-  std::cout << "Opening the serial device (Win32) '" << m_deviceName << "'..." << std::endl;
-
-  // open and get a handle to the serial device
-  m_fd = CreateFile(devPath, GENERIC_READ | GENERIC_WRITE, 0, NULL,
-                    OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-
-  // verify that the serial device was opened
-  if (m_fd != INVALID_HANDLE_VALUE)
-  {
-    if (GetCommState(m_fd, &dcb) == TRUE)
-    {
-      // set the serial port parameters
-      dcb.BaudRate = 4800;
-      dcb.fParity = FALSE;
-      dcb.fOutxCtsFlow = FALSE;
-      dcb.fOutxDsrFlow = FALSE;
-      dcb.fDtrControl = FALSE;
-      dcb.fRtsControl = FALSE;
-      dcb.ByteSize = 8;
-      dcb.Parity = 0;
-      dcb.StopBits = 0;
-
-      if ((SetCommState(m_fd, &dcb) == TRUE) &&
-          (GetCommTimeouts(m_fd, &commTimeouts) == TRUE))
-      {
-        // modify the COM port parameters to wait 100 ms before timing out
-        commTimeouts.ReadIntervalTimeout = 100;
-        commTimeouts.ReadTotalTimeoutMultiplier = 0;
-        commTimeouts.ReadTotalTimeoutConstant = 100;
-
-        if (SetCommTimeouts(m_fd, &commTimeouts) == TRUE)
-        {
-          success = true;
-        }
-      }
-    }
-
-    // the serial device was opened, but couldn't be configured properly;
-    // close it before returning with failure
-    if (!success)
-    {
-      std::cerr << "Failure setting up port; closing serial device..." << std::cerr;
-      CloseHandle(m_fd);
-    }
-  }
-  else
-  {
-    std::cerr << "Error opening device." << std::endl;
-  }
-
-#endif
-
-  return success;
-}
-
-/**
- * Closes the serial port device.
- */
-void Kwp71::closeDevice()
-{
-  close(m_fd);
 }
 
 /**
@@ -209,14 +84,11 @@ void Kwp71::shutdown()
 {
   if (m_ifThread.joinable())
   {
-    std::cout << "setting m_shutdown" << std::endl;
     m_shutdown = true;
-    std::cout << "calling m_ifThread.join()" << std::endl;
     m_ifThread.join();
   }
-  std::cout << "calling closeDevice()" << std::endl;
-  closeDevice();
-  std::cout << "returning from shutdown()" << std::endl;
+  ftdi_usb_close(&m_ftdi);
+  ftdi_deinit(&m_ftdi);
 }
 
 bool Kwp71::isConnectionActive() const
@@ -244,14 +116,12 @@ bool Kwp71::sendPacket()
     // acknowledgement byte from the ECU (for every byte except the last).
     // Verify that the ack byte is the bitwise inversion of the sent byte.
     status =
-      (write(m_fd, &m_sendPacketBuf[index], 1) == 1) &&
-      (read(m_fd, &loopback, 1) == 1);
+      writeSerial(&m_sendPacketBuf[index], 1) &&
+      readSerial(&loopback, 1);
 
     if (index < m_sendPacketBuf[3])
     {
-      status = status &&
-        (read(m_fd, &ack, 1) == 1) &&
-        (ack == ~(m_sendPacketBuf[index]));
+      status = status && readSerial(&ack, 1) && (ack == ~(m_sendPacketBuf[index]));
     }
     index++;
   }
@@ -271,48 +141,36 @@ bool Kwp71::recvPacket(Kwp71PacketType& type)
   uint8_t loopback = 0;
   uint8_t ack = 0;
 
-  if (read(m_fd, &m_recvPacketBuf[0], 1) == 1)
+  if (readSerial(&m_recvPacketBuf[0], 1))
   {
     printf("Received pkt length byte: %02X\n", m_recvPacketBuf[0]);
 
     // ack the pkt length byte
-    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    //std::this_thread::sleep_for(std::chrono::milliseconds(5));
     ack = ~(m_recvPacketBuf[0]);
-    printf("send ack: %02X\n", ack);
-    status = (write(m_fd, &ack, 1) == 1);
-    if (read(m_fd, &loopback, 1) == 1)
-    {
-      printf("recv (loopback): %02X\n", loopback);
-    }
-    else
+    status = writeSerial(&ack, 1);
+    if (!readSerial(&loopback, 1))
     {
       status = false;
-      printf("read() timeout when attempting to read loopback byte\n");
     }
 
     while (status && (index < m_recvPacketBuf[0]))
     {
-      if (read(m_fd, &m_recvPacketBuf[index], 1) == 1)
+      if (readSerial(&m_recvPacketBuf[index], 1))
       {
-        printf("recv: %02X\n", m_recvPacketBuf[index]);
-
         // every byte except the last in the packet is ack'd
         if (index < m_recvPacketBuf[0])
         {
-          std::this_thread::sleep_for(std::chrono::milliseconds(5));
+          //std::this_thread::sleep_for(std::chrono::milliseconds(5));
           ack = ~(m_recvPacketBuf[index]);
-          printf("send ack: %02X\n", ack);
-          status = (write(m_fd, &ack, 1) == 1);
-          if (read(m_fd, &loopback, 1) == 1)
-          {
-            printf("recv (loopback): %02X\n", loopback);
-          }
-          else
+          status = writeSerial(&ack, 1);
+          if (!readSerial(&loopback, 1))
           {
             status = false;
-            printf("read() timeout when attempting to read loopback byte\n");
           }
         }
+
+        index++;
       }
       else
       {
@@ -320,6 +178,7 @@ bool Kwp71::recvPacket(Kwp71PacketType& type)
         status = false;
       }
     }
+    printf("\n");
   }
 
   if (status)
@@ -401,21 +260,66 @@ bool Kwp71::populatePacket(bool usePendingCommand)
   return status;
 }
 
-void libftdireset()
+bool Kwp71::setFtdiSerialProperties()
 {
-  libusb_context* context = NULL;
-  libusb_device_handle* dev_handle = NULL;
-  int rc = libusb_init(&context);
-
-  dev_handle = libusb_open_device_with_vid_pid(context, 0x0403, 0x6001);
-  if (libusb_kernel_driver_active(dev_handle, 0))
+  // TODO: parameterize the baud rate
+  int status = ftdi_set_baudrate(&m_ftdi, 4800);
+  if (status == 0)
   {
-    rc = libusb_detach_kernel_driver(dev_handle, 0);
+    status = ftdi_set_line_property(&m_ftdi, BITS_8, STOP_BIT_1, NONE);
+    if (status == 0)
+    {
+      status = ftdi_set_latency_timer(&m_ftdi, 1);
+      if (status != 0)
+      {
+        std::cerr << "Failed to set FTDI latency timer (" << status << "), " <<
+          ftdi_get_error_string(&m_ftdi) << std::endl;
+      }
+    }
+    else
+    {
+      std::cerr << "Failed to set FTDI line properties (" << status << "), " <<
+        ftdi_get_error_string(&m_ftdi) << std::endl;
+    }
   }
-  libusb_reset_device(dev_handle);
-  libusb_attach_kernel_driver(dev_handle, 0);
-  libusb_close(dev_handle);
-  libusb_exit(context);
+  else
+  {
+    std::cerr << "Failed to set FTDI baud rate (" << status << "), " <<
+      ftdi_get_error_string(&m_ftdi) << std::endl;
+  }
+  return (status == 0);
+}
+
+bool Kwp71::readSerial(uint8_t* buf, int count)
+{
+  int readCount = 0;
+  int status = 0;
+  std::chrono::time_point start = std::chrono::steady_clock::now();
+
+  do {
+    status = ftdi_read_data(&m_ftdi, buf + readCount, count - readCount);
+    readCount += (status > 0) ? status : 0;
+  } while ((readCount < count) &&
+           (status >= 0) &&
+           ((std::chrono::steady_clock::now() - start) < std::chrono::milliseconds(1000)));
+  std::chrono::duration<double> diff = std::chrono::steady_clock::now() - start;
+  
+  return (readCount == count);
+}
+
+bool Kwp71::writeSerial(uint8_t* buf, int count)
+{
+  int status = 0;
+  int numWritten = 0;
+  do {
+    status = ftdi_write_data(&m_ftdi, buf + numWritten, count - numWritten);
+    if (status > 0)
+    {
+      numWritten += status;
+    }
+  } while (status > 0);
+  
+  return (numWritten == count);
 }
 
 /**
@@ -425,91 +329,104 @@ void libftdireset()
 bool Kwp71::slowInit(uint8_t address, int databits, int parity)
 {
   bool status = false;
-  struct ftdi_context ftdic;
   unsigned char c;
   int f = 0;
   int bitindex = 0;
   int parityCount = 0;
 
-  // return immediately if basic init fails
-  if ((ftdi_init(&ftdic) != 0) ||
-      (ftdi_set_interface(&ftdic, INTERFACE_A) != 0))
+  // Enable bitbang mode with a single output line (TXD)
+  if ((f = ftdi_set_bitmode(&m_ftdi, 0x01, BITMODE_BITBANG)) == 0)
   {
-    std::cerr << "ftdi_init() or ftdi_set_interface() failed" << std::endl;
-    return false;
-  }
+    // start bit
+    c = 0;
+    ftdi_write_data(&m_ftdi, &c, 1);
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
-  // Open FTDI device based on FT232R vendor & product IDs
-  // TODO: open device associated with the passed-in /dev/ttyUSBx instead?
-  if ((f = ftdi_usb_open(&ftdic, 0x0403, 0x6001)) == 0)
-  {
-    // Enable bitbang mode with a single output line (TXD)
-    if ((f = ftdi_set_bitmode(&ftdic, 0x01, BITMODE_BITBANG)) == 0)
+    // data bits
+    for (bitindex = 0; bitindex < databits; bitindex++)
     {
-      // start bit
-      c = 0;
-      ftdi_write_data(&ftdic, &c, 1);
+      c = ((1 << bitindex) & address) ? 1 : 0;
+      if (c)
+      {
+        parityCount++;
+      }
+      ftdi_write_data(&m_ftdi, &c, 1);
       std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    }
 
-      // data bits
-      for (bitindex = 0; bitindex < databits; bitindex++)
-      {
-        c = ((1 << bitindex) & address) ? 1 : 0;
-        if (c)
-        {
-          parityCount++;
-        }
-        ftdi_write_data(&ftdic, &c, 1);
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
-      }
-
-      if (parity == 1)
-      {
-        // odd parity
-        c = (parityCount % 2) ? 1 : 0;
-        ftdi_write_data(&ftdic, &c, 1);
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
-      }
-      else if (parity == 2)
-      {
-        // even parity
-        c = (parityCount % 2) ? 0 : 1;
-        ftdi_write_data(&ftdic, &c, 1);
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
-      }
-
-      // stop bit
-      c = 1;
-      ftdi_write_data(&ftdic, &c, 1);
+    if (parity == 1)
+    {
+      // odd parity
+      c = (parityCount % 2) ? 1 : 0;
+      ftdi_write_data(&m_ftdi, &c, 1);
       std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    }
+    else if (parity == 2)
+    {
+      // even parity
+      c = (parityCount % 2) ? 0 : 1;
+      ftdi_write_data(&m_ftdi, &c, 1);
+      std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    }
 
-      if (ftdi_set_bitmode(&ftdic, 0x01, BITMODE_RESET) == 0)
-      {
-        status = true;
-      }
-      else
-      {
-        std::cerr << "Failed to reset bitmode to FIFO/serial" << std::endl;
-      }
+    // stop bit
+    c = 1;
+    ftdi_write_data(&m_ftdi, &c, 1);
+
+    // TODO: is a delay needed here?
+    //std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+    if (ftdi_set_bitmode(&m_ftdi, 0x01, BITMODE_RESET) == 0)
+    {
+      status = true;
     }
     else
     {
-      std::cerr << "Failed to set bitbang mode" << std::endl;
+      std::cerr << "Failed to disable bitbang mode" << std::endl;
     }
-
-    ftdi_usb_close(&ftdic);
-
-    libftdireset();
   }
   else
   {
-    std::cerr << "Failed to open FTDI device: " << f << ", " <<
-      ftdi_get_error_string(&ftdic) << std::endl;
+    std::cerr << "Failed to set bitbang mode" << std::endl;
   }
 
-  ftdi_deinit(&ftdic);
-
   return status;
+}
+
+/**
+ * Reads bytes from the serial port until the entire provided sequence
+ * is seen (in order) or the allowed time expires. Some (all?) FTDI
+ * devices will have a buffer full of bitbang mode status bytes after
+ * switching back to serial/FIFO mode, so we need to simply read until
+ * we find the desired sequence.
+ */
+bool Kwp71::waitForByteSequence(const std::vector<uint8_t>& sequence,
+                                std::chrono::milliseconds timeout)
+{
+  uint8_t curByte = 0;
+  int matchedBytes = 0;
+  const std::chrono::time_point start = std::chrono::steady_clock::now();
+  const std::chrono::time_point end = start + timeout;
+  std::chrono::milliseconds elapsed =
+    std::chrono::duration_cast<std::chrono::milliseconds>(end - std::chrono::steady_clock::now());
+
+  while ((matchedBytes < sequence.size()) && (elapsed < timeout))
+  {
+    if (ftdi_read_data(&m_ftdi, &curByte, 1) == 1)
+    {
+      if (curByte == sequence.at(matchedBytes))
+      {
+        matchedBytes++;
+      }
+      else
+      {
+        matchedBytes = 0;
+      }
+    }
+    elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - std::chrono::steady_clock::now());
+  }
+
+  return (matchedBytes == sequence.size());
 }
 
 /**
@@ -520,37 +437,18 @@ bool Kwp71::slowInit(uint8_t address, int databits, int parity)
 bool Kwp71::readAckKeywordBytes()
 {
   bool status = false;
-  uint8_t kwpBytes[3] = { 0, 0, 0 };
-  int byteCount = 0;
-
-  for (int byteCount = 0; byteCount < 3; byteCount++)
+  const std::vector<uint8_t> kwp({0x55, 0x00, 0x81});
+  
+  if (waitForByteSequence(kwp, std::chrono::milliseconds(1500)))
   {
-    if (read(m_fd, &kwpBytes[byteCount], 1) == 1)
-    {
-      printf("read byte: %02X\n", kwpBytes[byteCount]);
-    }
-  }
 
-  if ((kwpBytes[0] == 0x55) &&
-      (kwpBytes[1] == 0x00) && 
-      (kwpBytes[2] == 0x81))
-  {
-    // write the bitwise inversion to acknowledge, and read it
-    // back to to clear the rx buffer
+    uint8_t echoByte = ~(kwp[2]);
     std::this_thread::sleep_for(std::chrono::milliseconds(5));
-    kwpBytes[2] = ~(kwpBytes[2]);
-    if (write(m_fd, &kwpBytes[2], 1) &&
-        read(m_fd, &kwpBytes[2], 1))
+    if (writeSerial(&echoByte, 1) &&
+        readSerial(&echoByte, 1))
     {
       status = true;
     }
-  }
-  else
-  {
-    std::cerr << "Keyword bytes (" << std::setfill('0') <<
-      std::setw(2) << std::right << std::hex <<
-      kwpBytes[0] << " " << kwpBytes[1] << " " << kwpBytes[2] <<
-      ") did not match expected" << std::dec << std::endl;
   }
 
   return status;
@@ -655,15 +553,10 @@ void Kwp71::commLoop()
     while (!m_connectionActive && !m_shutdown)
     {
       std::cout << "(thread) starting connection attempt loop" << std::endl;
-      slowInit(m_ecuAddr, 8, 0);
-
-      if (openSerialPort())
+      if (slowInit(m_ecuAddr, 8, 0) &&
+          setFtdiSerialProperties())
       {
         m_connectionActive = readAckKeywordBytes();
-      }
-      else
-      {
-        std::cerr << "Error opening serial device '" << m_deviceName << "'" << std::endl;
       }
     }
     std::cout << "(thread) done with connection attempt loop" << std::endl;
@@ -710,11 +603,6 @@ void Kwp71::commLoop()
       // sending empty ACK packets, waiting for us to send a command
       populatePacket(m_readyForCommand);
       sendPacket();
-    }
-
-    if (!m_connectionActive)
-    {
-      closeDevice();
     }
   }
   std::cout << "(thread) exiting commLoop" << std::endl;

@@ -3,43 +3,20 @@
 #include <stdlib.h>
 #include "kwp71.h"
 
-void usage(const Kwp71Version ver, const char* name)
-{
-  std::cout << "kwp71read using libkwp71 v" <<
-    ver.major << "." << ver.minor << "." << ver.patch << std::endl <<
-    "Usage: " << name << " <serial device>" << std::endl;
-}
-
 int main(int argc, char** argv)
 {
   int status = 0;
   const Kwp71Version ver = Kwp71::getLibraryVersion();
   uint8_t addr = 0x10;
 
-  if (argc < 3)
-  {
-    usage(ver, argv[0]);
-    return 0;
-  }
+  std::cout << "kwp71read using libkwp71 v" <<
+    (int)ver.major << "." << (int)ver.minor << "." << (int)ver.patch << std::endl;
 
   Kwp71 kwp;
-  std::cout << "Calling connect(" << argv[1] << ", " << (int)addr << ")..." << std::endl;
-  if (kwp.connect(std::string(argv[1]), addr))
+  std::cout << "Calling connect(" << (int)addr << ")..." << std::endl;
+  if (kwp.connect(addr))
   {
-    std::vector<std::string> idResponse;
-    if (kwp.requestIDInfo(idResponse))
-    {
-      std::cout << "--- ID info ---" << std::endl;
-      for (int i = 0; i < idResponse.size(); i++)
-      {
-        std::cout << idResponse[i] << std::endl;
-      }
-      std::cout << "---------------" << std::endl;
-    }
-    else
-    {
-      std::cout << "requestIDInfo() failed" << std::endl;
-    }
+    std::this_thread::sleep_for(std::chrono::seconds(5));
   }
   else
   {
