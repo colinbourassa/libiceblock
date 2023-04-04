@@ -1,15 +1,8 @@
 #include "kwp71.h"
 #include <iostream>
-#include <iomanip>
 #include <chrono>
 #include <mutex>
-#include <termios.h>
 #include <unistd.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <string.h>
-#include <errno.h>
 
 Kwp71Version Kwp71::getLibraryVersion()
 {
@@ -108,6 +101,7 @@ bool Kwp71::sendPacket()
   uint8_t index = 0;
   uint8_t loopback = 0;
   uint8_t ack = 0;
+  uint8_t ackCompare = 0;
 
   while (status && (index <= m_sendPacketBuf[0]))
   {
@@ -118,10 +112,18 @@ bool Kwp71::sendPacket()
     status =
       writeSerial(&m_sendPacketBuf[index], 1) &&
       readSerial(&loopback, 1);
+    ackCompare = ~(m_sendPacketBuf[index]);
 
-    if (index < m_sendPacketBuf[3])
+    if (status && (index < m_sendPacketBuf[0]))
     {
-      status = status && readSerial(&ack, 1) && (ack == ~(m_sendPacketBuf[index]));
+      if (readSerial(&ack, 1))
+      {
+        status = (ack == ackCompare);
+      }
+      else
+      {
+        status = false;
+      }
     }
     index++;
   }
@@ -143,8 +145,6 @@ bool Kwp71::recvPacket(Kwp71PacketType& type)
 
   if (readSerial(&m_recvPacketBuf[0], 1))
   {
-    printf("Received pkt length byte: %02X\n", m_recvPacketBuf[0]);
-
     // ack the pkt length byte
     //std::this_thread::sleep_for(std::chrono::milliseconds(5));
     ack = ~(m_recvPacketBuf[0]);
@@ -154,7 +154,7 @@ bool Kwp71::recvPacket(Kwp71PacketType& type)
       status = false;
     }
 
-    while (status && (index < m_recvPacketBuf[0]))
+    while (status && (index <= m_recvPacketBuf[0]))
     {
       if (readSerial(&m_recvPacketBuf[index], 1))
       {
@@ -169,7 +169,6 @@ bool Kwp71::recvPacket(Kwp71PacketType& type)
             status = false;
           }
         }
-
         index++;
       }
       else
@@ -178,7 +177,6 @@ bool Kwp71::recvPacket(Kwp71PacketType& type)
         status = false;
       }
     }
-    printf("\n");
   }
 
   if (status)
@@ -300,7 +298,7 @@ bool Kwp71::readSerial(uint8_t* buf, int count)
     status = ftdi_read_data(&m_ftdi, buf + readCount, count - readCount);
     readCount += (status > 0) ? status : 0;
   } while ((readCount < count) &&
-           (status >= 0) &&
+           (status != -666) &&
            ((std::chrono::steady_clock::now() - start) < std::chrono::milliseconds(1000)));
   std::chrono::duration<double> diff = std::chrono::steady_clock::now() - start;
   
@@ -441,7 +439,6 @@ bool Kwp71::readAckKeywordBytes()
   
   if (waitForByteSequence(kwp, std::chrono::milliseconds(1500)))
   {
-
     uint8_t echoByte = ~(kwp[2]);
     std::this_thread::sleep_for(std::chrono::milliseconds(5));
     if (writeSerial(&echoByte, 1) &&
@@ -559,14 +556,12 @@ void Kwp71::commLoop()
         m_connectionActive = readAckKeywordBytes();
       }
     }
-    std::cout << "(thread) done with connection attempt loop" << std::endl;
-
-    Kwp71PacketType recvType;
 
     // The ECU apparently sends its ID info unsolicited next; this is why we
     // start the next loop with a receive operation.
 
     // continue taking turns with the ECU, sending one packet per turn
+    Kwp71PacketType recvType;
     while (m_connectionActive && !m_shutdown)
     {
       if (recvPacket(recvType))

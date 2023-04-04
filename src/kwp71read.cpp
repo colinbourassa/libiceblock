@@ -1,4 +1,5 @@
 #include <iostream>
+#include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include "kwp71.h"
@@ -16,7 +17,11 @@ int main(int argc, char** argv)
   std::cout << "Calling connect(" << (int)addr << ")..." << std::endl;
   if (kwp.connect(addr))
   {
-    std::this_thread::sleep_for(std::chrono::seconds(5));
+    char ch;
+    do {
+      if (scanf("%c", &ch) == 1)
+        printf("\nkeypress: %c\n", ch);
+    } while (ch != 'q');
   }
   else
   {
