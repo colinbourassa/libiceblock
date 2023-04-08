@@ -21,7 +21,7 @@ Kwp71::Kwp71() :
   m_shutdown(false),
   m_ifThreadPtr(nullptr),
   m_lastUsedSeqNum(0),
-  m_readyForCommand(true),
+  m_lastReceivedPacketType(Kwp71PacketType::Empty),
   m_receivingData(false),
   m_responseReadSuccess(false)
 {
@@ -130,7 +130,6 @@ bool Kwp71::sendPacket()
   uint8_t ack = 0;
   uint8_t ackCompare = 0;
 
-  printf("send: ");
   while (status && (index <= m_sendPacketBuf[0]))
   {
     // Transmit the packet one byte at a time, reading back the same byte as
@@ -138,11 +137,9 @@ bool Kwp71::sendPacket()
     // acknowledgement byte from the ECU (for every byte except the last).
     // Verify that the ack byte is the bitwise inversion of the sent byte.
     status = writeSerial(&m_sendPacketBuf[index], 1);
-    if (status) printf("(%02X)", m_sendPacketBuf[index]);
     if (status)
     {
       status = readSerial(&loopback, 1);
-      if (status) printf("[%02X] ", loopback);
     }
     ackCompare = ~(m_sendPacketBuf[index]);
 
@@ -150,7 +147,6 @@ bool Kwp71::sendPacket()
     {
       if (readSerial(&ack, 1))
       {
-        printf("%02X ", ack);
         status = (ack == ackCompare);
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
       }
@@ -161,7 +157,7 @@ bool Kwp71::sendPacket()
     }
     index++;
   }
-  printf("\n");
+  if (status) printf("sent: %02X\n", m_sendPacketBuf[2]);
   return status;
 }
 
@@ -171,7 +167,7 @@ bool Kwp71::sendPacket()
  * its bitwise inversion. Returns true if all the expected bytes are received,
  * false otherwise.
  */
-bool Kwp71::recvPacket(Kwp71PacketType& type)
+bool Kwp71::recvPacket()
 {
   bool status = true;
   uint8_t index = 1;
@@ -180,7 +176,6 @@ bool Kwp71::recvPacket(Kwp71PacketType& type)
 
   if (readSerial(&m_recvPacketBuf[0], 1))
   {
-    printf("recv: %02X ", m_recvPacketBuf[0]);
     // ack the pkt length byte
     std::this_thread::sleep_for(std::chrono::milliseconds(2));
     ack = ~(m_recvPacketBuf[0]);
@@ -194,21 +189,15 @@ bool Kwp71::recvPacket(Kwp71PacketType& type)
     {
       if (readSerial(&m_recvPacketBuf[index], 1))
       {
-        printf("%02X", m_recvPacketBuf[index]);
         // every byte except the last in the packet is ack'd
         if (index < m_recvPacketBuf[0])
         {
           std::this_thread::sleep_for(std::chrono::milliseconds(2));
           ack = ~(m_recvPacketBuf[index]);
-          printf("(%02X)", ack);
           status = writeSerial(&ack, 1);
           if (!readSerial(&loopback, 1))
           {
             status = false;
-          }
-          else
-          {
-            printf("[%02X] ", loopback);
           }
         }
         index++;
@@ -219,13 +208,13 @@ bool Kwp71::recvPacket(Kwp71PacketType& type)
         status = false;
       }
     }
-    printf("\n");
   }
 
   if (status)
   {
-    type = (Kwp71PacketType)(m_recvPacketBuf[2]);
+    m_lastReceivedPacketType = (Kwp71PacketType)(m_recvPacketBuf[2]);
     m_lastUsedSeqNum = m_recvPacketBuf[1];
+    printf("recv:    %02X\n", m_recvPacketBuf[2]);
   }
 
   return status;
@@ -240,7 +229,7 @@ bool Kwp71::populatePacket(bool usePendingCommand)
   Kwp71PacketType type;
   std::vector<uint8_t> payload;
 
-  if (usePendingCommand)
+  if (usePendingCommand && m_commandReady)
   {
     type = m_pendingCmd.type;
     payload = m_pendingCmd.payload;
@@ -528,6 +517,7 @@ bool Kwp71::requestIDInfo(std::vector<std::string>& idResponse)
 
   m_pendingCmd.type = Kwp71PacketType::RequestID;
   m_pendingCmd.payload = std::vector<uint8_t>();
+  m_commandReady = true;
 
   // wait until the response from this command has been completely received
   std::cout << "Command sender waiting for response..." << std::endl;
@@ -537,6 +527,7 @@ bool Kwp71::requestIDInfo(std::vector<std::string>& idResponse)
     idResponse = m_responseStringData;
     m_responseStringData.clear();
   }
+  m_commandReady = false;
 
   return m_responseReadSuccess;
 }
@@ -551,6 +542,7 @@ bool Kwp71::sendCommand(Kwp71Command cmd, std::vector<uint8_t>& response)
   std::unique_lock<std::mutex> lock(m_responseMutex);
 
   m_pendingCmd = cmd;
+  m_commandReady = true;
 
   // wait until the response from this command has been completely received
   std::cout << "Command sender waiting for response..." << std::endl;
@@ -560,6 +552,7 @@ bool Kwp71::sendCommand(Kwp71Command cmd, std::vector<uint8_t>& response)
     response = m_responseBinaryData;
     m_responseBinaryData.clear();
   }
+  m_commandReady = false;
 
   return m_responseReadSuccess;
 }
@@ -628,14 +621,14 @@ void Kwp71::commLoop()
     // start the next loop with a receive operation.
 
     // continue taking turns with the ECU, sending one packet per turn
-    Kwp71PacketType recvType;
     while (m_connectionActive && !m_shutdown)
     {
-      if (recvPacket(recvType))
+      if (recvPacket())
       {
-        if (recvType == Kwp71PacketType::Empty)
+        // if the last packet received from the ECU was an empty/ack,
+        // then we can send a command of our own (if we have one available)
+        if (m_lastReceivedPacketType == Kwp71PacketType::Empty)
         {
-          m_readyForCommand = true;
           if (m_receivingData)
           {
             m_receivingData = false;
@@ -645,7 +638,6 @@ void Kwp71::commLoop()
         }
         else
         {
-          m_readyForCommand = false;
           m_receivingData = true;
         }
       }
@@ -663,7 +655,7 @@ void Kwp71::commLoop()
 
       // the readyForCommand flag is only set when the ECU is simply
       // sending empty ACK packets, waiting for us to send a command
-      populatePacket(m_readyForCommand);
+      populatePacket(m_lastReceivedPacketType == Kwp71PacketType::Empty);
       sendPacket();
     }
   }

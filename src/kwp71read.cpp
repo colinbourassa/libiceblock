@@ -20,7 +20,25 @@ int main(int argc, char** argv)
     char ch;
     do {
       if (scanf("%c", &ch) == 1)
+      {
         printf("\nkeypress: %c\n", ch);
+        if (ch == 'i')
+        {
+          std::vector<std::string> idResp;
+          if (kwp.requestIDInfo(idResp))
+          {
+            printf("Got %u strings!\n", idResp.size());
+            for (int i = 0; i < idResp.size(); i++)
+            {
+              std::cout << "    " << idResp[i] << std::endl;
+            }
+          }
+          else
+          {
+            printf("Failed to get ID response.\n");
+          }
+        }
+      }
     } while (ch != 'q');
   }
   else

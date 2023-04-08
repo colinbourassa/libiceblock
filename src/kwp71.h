@@ -71,7 +71,8 @@ private:
   uint8_t m_sendPacketBuf[256];
   uint8_t m_recvPacketBuf[256];
 
-  bool m_readyForCommand;
+  Kwp71PacketType m_lastReceivedPacketType;
+  bool m_commandReady;
   bool m_receivingData;
   std::vector<uint8_t> m_responseBinaryData;
   std::vector<std::string> m_responseStringData;
@@ -93,7 +94,7 @@ private:
   bool setFtdiSerialProperties();
   void closeFtdi();
   bool sendPacket();
-  bool recvPacket(Kwp71PacketType& type);
+  bool recvPacket();
   void processReceivedPacket();
   bool slowInit(uint8_t address, int databits, int parity);
   void commLoop();
