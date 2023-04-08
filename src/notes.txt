@@ -1,0 +1,2 @@
+It looks there is some 256-byte internal buffer in the FTDI that fills with some combination of FF and FC (in my experimentation) as the device is in bitbang mode. ftdi_tciflush() doesn't flush this buffer.
+

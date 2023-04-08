@@ -19,6 +19,7 @@ Kwp71::Kwp71() :
   m_connectionActive(false),
   m_ecuAddr(0),
   m_shutdown(false),
+  m_ifThreadPtr(nullptr),
   m_lastUsedSeqNum(0),
   m_readyForCommand(true),
   m_receivingData(false),
@@ -31,12 +32,13 @@ Kwp71::Kwp71() :
  * opens the serial port device, using it to read the ECU's keyword bytes.
  * Returns true if all of this is successful; false otherwise.
  */
-bool Kwp71::connect(uint8_t addr)
+bool Kwp71::connect(uint16_t vid, uint16_t pid, uint8_t addr)
 {
   bool status = false;
   std::unique_lock<std::mutex> lock(m_connectMutex);
 
-  if (!m_ifThread.joinable())
+  m_shutdown = false;
+  if (m_ifThreadPtr == nullptr)
   {
     if ((ftdi_init(&m_ftdi) == 0) &&
         (ftdi_set_interface(&m_ftdi, INTERFACE_A) == 0))
@@ -44,10 +46,12 @@ bool Kwp71::connect(uint8_t addr)
       m_ecuAddr = addr;
       m_connectionActive = false;
 
-      if ((ftdi_usb_open(&m_ftdi, 0x0403, 0x6001) == 0))
+      if ((ftdi_usb_open(&m_ftdi, 0x0403, 0xfa20) == 0))
       {
         printf("ftdi_usb_open() success\n");
+        // TODO: probably don't need the reset
         printf("ftdi_usb_reset() returned %d\n", ftdi_usb_reset(&m_ftdi));
+        // TODO: parameterize the data bits and parity
         if (slowInit(m_ecuAddr, 8, 0))
         {
           printf("slowInit() success\n");
@@ -58,41 +62,8 @@ bool Kwp71::connect(uint8_t addr)
             {
               printf("readAckKeywordBytes() success\n");
               m_connectionActive = true;
-              //m_ifThread = std::thread(threadEntry, this);
-              /// temp
-              Kwp71PacketType type;
-              recvPacket(type);
-              populatePacket(false);
-              std::this_thread::sleep_for(std::chrono::milliseconds(9));
-              sendPacket();
-              recvPacket(type);
-              std::this_thread::sleep_for(std::chrono::milliseconds(9));
-              populatePacket(false);
-              sendPacket();
-              recvPacket(type);
-              std::this_thread::sleep_for(std::chrono::milliseconds(9));
-              populatePacket(false);
-              sendPacket();
-              recvPacket(type);
-              std::this_thread::sleep_for(std::chrono::milliseconds(9));
-              populatePacket(false);
-              sendPacket();
-              recvPacket(type);
-              std::this_thread::sleep_for(std::chrono::milliseconds(9));
-              populatePacket(false);
-              sendPacket();
-              recvPacket(type);
-              std::this_thread::sleep_for(std::chrono::milliseconds(9));
-              populatePacket(false);
-              sendPacket();
-              recvPacket(type);
-              std::this_thread::sleep_for(std::chrono::milliseconds(9));
-              populatePacket(false);
-              sendPacket();
-              recvPacket(type);
-
-              /// temp
-              status = false; // TODO: change this back
+              m_ifThreadPtr = std::make_unique<std::thread>(threadEntry, this);
+              status = true;
             }
             else
             {
@@ -127,12 +98,14 @@ bool Kwp71::connect(uint8_t addr)
  * Shuts down the connection and waits for the connection thread to
  * finish.
  */
-void Kwp71::shutdown()
+void Kwp71::disconnect()
 {
-  if (m_ifThread.joinable())
+  std::unique_lock<std::mutex> lock(m_connectMutex);
+
+  if (m_ifThreadPtr && m_ifThreadPtr->joinable())
   {
     m_shutdown = true;
-    m_ifThread.join();
+    m_ifThreadPtr->join();
   }
   ftdi_usb_close(&m_ftdi);
   ftdi_deinit(&m_ftdi);
@@ -179,8 +152,7 @@ bool Kwp71::sendPacket()
       {
         printf("%02X ", ack);
         status = (ack == ackCompare);
-        if (!status) printf(" !! ack byte mismatch (%02X expected vs %02X received) !! ", ackCompare, ack);
-        std::this_thread::sleep_for(std::chrono::milliseconds(9));
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
       }
       else
       {
@@ -210,7 +182,7 @@ bool Kwp71::recvPacket(Kwp71PacketType& type)
   {
     printf("recv: %02X ", m_recvPacketBuf[0]);
     // ack the pkt length byte
-    std::this_thread::sleep_for(std::chrono::milliseconds(9));
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
     ack = ~(m_recvPacketBuf[0]);
     status = writeSerial(&ack, 1);
     if (!readSerial(&loopback, 1))
@@ -226,7 +198,7 @@ bool Kwp71::recvPacket(Kwp71PacketType& type)
         // every byte except the last in the packet is ack'd
         if (index < m_recvPacketBuf[0])
         {
-          std::this_thread::sleep_for(std::chrono::milliseconds(9));
+          std::this_thread::sleep_for(std::chrono::milliseconds(2));
           ack = ~(m_recvPacketBuf[index]);
           printf("(%02X)", ack);
           status = writeSerial(&ack, 1);
@@ -525,7 +497,7 @@ bool Kwp71::readAckKeywordBytes()
   {
     uint8_t echoByte = ~(kwp[2]);
     printf("readAckKeywordBytes(): got keyword sequence, sending ack of %02X ...", echoByte);
-    std::this_thread::sleep_for(std::chrono::milliseconds(25));
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
     if (writeSerial(&echoByte, 1) &&
         readSerial(&echoByte, 1))
     {
@@ -644,6 +616,7 @@ void Kwp71::commLoop()
     while (!m_connectionActive && !m_shutdown)
     {
       std::cout << "(thread) starting connection attempt loop" << std::endl;
+      // TODO: parameterize the data bit count and parity
       if (slowInit(m_ecuAddr, 8, 0) &&
           setFtdiSerialProperties())
       {

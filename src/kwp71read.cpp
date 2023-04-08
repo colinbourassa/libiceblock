@@ -15,7 +15,7 @@ int main(int argc, char** argv)
 
   Kwp71 kwp;
   std::cout << "Calling connect(" << (int)addr << ")..." << std::endl;
-  if (kwp.connect(addr))
+  if (kwp.connect(0x0403, 0xfa20, addr))
   {
     char ch;
     do {
@@ -28,7 +28,7 @@ int main(int argc, char** argv)
     std::cout << "connect() failed" << std::endl;
   }
   std::cout << "Calling shutdown()..." << std::endl;
-  kwp.shutdown();
+  kwp.disconnect();
 
   return status;
 }

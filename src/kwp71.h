@@ -3,6 +3,7 @@
 #include <thread>
 #include <vector>
 #include <chrono>
+#include <memory>
 #include <condition_variable>
 #include <stdint.h>
 #include <libftdi1/ftdi.h>
@@ -54,8 +55,8 @@ class Kwp71
 {
 public:
   Kwp71();
-  bool connect(uint8_t addr);
-  void shutdown();
+  bool connect(uint16_t vid, uint16_t pid, uint8_t addr);
+  void disconnect();
   bool requestIDInfo(std::vector<std::string>& idResponse);
   bool sendCommand(Kwp71Command cmd, std::vector<uint8_t>& response);
   static Kwp71Version getLibraryVersion();
@@ -64,7 +65,7 @@ private:
   bool m_connectionActive;
   uint8_t m_ecuAddr;
   bool m_shutdown;
-  std::thread m_ifThread;
+  std::unique_ptr<std::thread> m_ifThreadPtr;
   std::string m_deviceName;
   uint8_t m_lastUsedSeqNum;
   uint8_t m_sendPacketBuf[256];
