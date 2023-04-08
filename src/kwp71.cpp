@@ -46,23 +46,77 @@ bool Kwp71::connect(uint8_t addr)
 
       if ((ftdi_usb_open(&m_ftdi, 0x0403, 0x6001) == 0))
       {
-        printf("-- ftdi_usb_open() success\n");
+        printf("ftdi_usb_open() success\n");
+        printf("ftdi_usb_reset() returned %d\n", ftdi_usb_reset(&m_ftdi));
         if (slowInit(m_ecuAddr, 8, 0))
         {
-          printf("-- slowInit() success\n");
+          printf("slowInit() success\n");
           if (setFtdiSerialProperties())
           {
-            printf("-- setFtdiSerialProperties() success\n");
+            printf("setFtdiSerialProperties() success\n");
             if (readAckKeywordBytes())
             {
-              printf("-- readAckKeywordBytes() success\n");
+              printf("readAckKeywordBytes() success\n");
               m_connectionActive = true;
-              m_ifThread = std::thread(threadEntry, this);
-              status = true;
+              //m_ifThread = std::thread(threadEntry, this);
+              /// temp
+              Kwp71PacketType type;
+              recvPacket(type);
+              populatePacket(false);
+              std::this_thread::sleep_for(std::chrono::milliseconds(9));
+              sendPacket();
+              recvPacket(type);
+              std::this_thread::sleep_for(std::chrono::milliseconds(9));
+              populatePacket(false);
+              sendPacket();
+              recvPacket(type);
+              std::this_thread::sleep_for(std::chrono::milliseconds(9));
+              populatePacket(false);
+              sendPacket();
+              recvPacket(type);
+              std::this_thread::sleep_for(std::chrono::milliseconds(9));
+              populatePacket(false);
+              sendPacket();
+              recvPacket(type);
+              std::this_thread::sleep_for(std::chrono::milliseconds(9));
+              populatePacket(false);
+              sendPacket();
+              recvPacket(type);
+              std::this_thread::sleep_for(std::chrono::milliseconds(9));
+              populatePacket(false);
+              sendPacket();
+              recvPacket(type);
+              std::this_thread::sleep_for(std::chrono::milliseconds(9));
+              populatePacket(false);
+              sendPacket();
+              recvPacket(type);
+
+              /// temp
+              status = false; // TODO: change this back
+            }
+            else
+            {
+              printf("readAckKeywordBytes() failed\n");
             }
           }
+          else
+          {
+            printf("setFtdiSerialProperties() failed\n");
+          }
+        }
+        else
+        {
+          printf("slowInit() failed\n");
         }
       }
+      else
+      {
+        printf("ftdi_usb_open() failed\n");
+      }
+    }
+    else
+    {
+      printf("ftdi_init() or ftdi_set_interface() failed\n");
     }
   }
 
@@ -103,22 +157,30 @@ bool Kwp71::sendPacket()
   uint8_t ack = 0;
   uint8_t ackCompare = 0;
 
+  printf("send: ");
   while (status && (index <= m_sendPacketBuf[0]))
   {
     // Transmit the packet one byte at a time, reading back the same byte as
     // it appears in the Rx buffer (due to the loopback) and then reading the
     // acknowledgement byte from the ECU (for every byte except the last).
     // Verify that the ack byte is the bitwise inversion of the sent byte.
-    status =
-      writeSerial(&m_sendPacketBuf[index], 1) &&
-      readSerial(&loopback, 1);
+    status = writeSerial(&m_sendPacketBuf[index], 1);
+    if (status) printf("(%02X)", m_sendPacketBuf[index]);
+    if (status)
+    {
+      status = readSerial(&loopback, 1);
+      if (status) printf("[%02X] ", loopback);
+    }
     ackCompare = ~(m_sendPacketBuf[index]);
 
     if (status && (index < m_sendPacketBuf[0]))
     {
       if (readSerial(&ack, 1))
       {
+        printf("%02X ", ack);
         status = (ack == ackCompare);
+        if (!status) printf(" !! ack byte mismatch (%02X expected vs %02X received) !! ", ackCompare, ack);
+        std::this_thread::sleep_for(std::chrono::milliseconds(9));
       }
       else
       {
@@ -127,6 +189,7 @@ bool Kwp71::sendPacket()
     }
     index++;
   }
+  printf("\n");
   return status;
 }
 
@@ -145,8 +208,9 @@ bool Kwp71::recvPacket(Kwp71PacketType& type)
 
   if (readSerial(&m_recvPacketBuf[0], 1))
   {
+    printf("recv: %02X ", m_recvPacketBuf[0]);
     // ack the pkt length byte
-    //std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    std::this_thread::sleep_for(std::chrono::milliseconds(9));
     ack = ~(m_recvPacketBuf[0]);
     status = writeSerial(&ack, 1);
     if (!readSerial(&loopback, 1))
@@ -158,15 +222,21 @@ bool Kwp71::recvPacket(Kwp71PacketType& type)
     {
       if (readSerial(&m_recvPacketBuf[index], 1))
       {
+        printf("%02X", m_recvPacketBuf[index]);
         // every byte except the last in the packet is ack'd
         if (index < m_recvPacketBuf[0])
         {
-          //std::this_thread::sleep_for(std::chrono::milliseconds(5));
+          std::this_thread::sleep_for(std::chrono::milliseconds(9));
           ack = ~(m_recvPacketBuf[index]);
+          printf("(%02X)", ack);
           status = writeSerial(&ack, 1);
           if (!readSerial(&loopback, 1))
           {
             status = false;
+          }
+          else
+          {
+            printf("[%02X] ", loopback);
           }
         }
         index++;
@@ -177,6 +247,7 @@ bool Kwp71::recvPacket(Kwp71PacketType& type)
         status = false;
       }
     }
+    printf("\n");
   }
 
   if (status)
@@ -265,6 +336,7 @@ bool Kwp71::setFtdiSerialProperties()
   if (status == 0)
   {
     status = ftdi_set_line_property(&m_ftdi, BITS_8, STOP_BIT_1, NONE);
+    status = status && ftdi_setflowctrl(&m_ftdi, SIO_DISABLE_FLOW_CTRL);
     if (status == 0)
     {
       status = ftdi_set_latency_timer(&m_ftdi, 1);
@@ -297,10 +369,13 @@ bool Kwp71::readSerial(uint8_t* buf, int count)
   do {
     status = ftdi_read_data(&m_ftdi, buf + readCount, count - readCount);
     readCount += (status > 0) ? status : 0;
+    if (readCount < count)
+    {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
   } while ((readCount < count) &&
            (status != -666) &&
            ((std::chrono::steady_clock::now() - start) < std::chrono::milliseconds(1000)));
-  std::chrono::duration<double> diff = std::chrono::steady_clock::now() - start;
   
   return (readCount == count);
 }
@@ -309,13 +384,14 @@ bool Kwp71::writeSerial(uint8_t* buf, int count)
 {
   int status = 0;
   int numWritten = 0;
+  std::chrono::time_point start = std::chrono::steady_clock::now();
+
   do {
     status = ftdi_write_data(&m_ftdi, buf + numWritten, count - numWritten);
-    if (status > 0)
-    {
-      numWritten += status;
-    }
-  } while (status > 0);
+    numWritten += (status > 0) ? status : 0;
+  } while ((numWritten < count) &&
+           (status != -666) &&
+           ((std::chrono::steady_clock::now() - start) < std::chrono::milliseconds(1000)));
   
   return (numWritten == count);
 }
@@ -332,6 +408,7 @@ bool Kwp71::slowInit(uint8_t address, int databits, int parity)
   int bitindex = 0;
   int parityCount = 0;
 
+  printf("performing slow init (addr %02X, %d data bits, %d parity)...\n", address, databits, parity);
   // Enable bitbang mode with a single output line (TXD)
   if ((f = ftdi_set_bitmode(&m_ftdi, 0x01, BITMODE_BITBANG)) == 0)
   {
@@ -372,10 +449,12 @@ bool Kwp71::slowInit(uint8_t address, int databits, int parity)
     ftdi_write_data(&m_ftdi, &c, 1);
 
     // TODO: is a delay needed here?
-    //std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    //std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-    if (ftdi_set_bitmode(&m_ftdi, 0x01, BITMODE_RESET) == 0)
+    if (ftdi_disable_bitbang(&m_ftdi) == 0)
+    //if (ftdi_set_bitmode(&m_ftdi, 0x01, BITMODE_RESET) == 0)
     {
+      ftdi_tcioflush(&m_ftdi);
       status = true;
     }
     else
@@ -387,6 +466,8 @@ bool Kwp71::slowInit(uint8_t address, int databits, int parity)
   {
     std::cerr << "Failed to set bitbang mode" << std::endl;
   }
+
+  printf("Slow init done.\n");
 
   return status;
 }
@@ -408,10 +489,12 @@ bool Kwp71::waitForByteSequence(const std::vector<uint8_t>& sequence,
   std::chrono::milliseconds elapsed =
     std::chrono::duration_cast<std::chrono::milliseconds>(end - std::chrono::steady_clock::now());
 
+  printf("waitForByteSequence(): ");
   while ((matchedBytes < sequence.size()) && (elapsed < timeout))
   {
     if (ftdi_read_data(&m_ftdi, &curByte, 1) == 1)
     {
+      printf("%02X ", curByte); 
       if (curByte == sequence.at(matchedBytes))
       {
         matchedBytes++;
@@ -423,6 +506,7 @@ bool Kwp71::waitForByteSequence(const std::vector<uint8_t>& sequence,
     }
     elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - std::chrono::steady_clock::now());
   }
+  printf("\nwaitForByteSequence() returning %s\n", (matchedBytes == sequence.size()) ? "success":"failure");
 
   return (matchedBytes == sequence.size());
 }
@@ -440,12 +524,22 @@ bool Kwp71::readAckKeywordBytes()
   if (waitForByteSequence(kwp, std::chrono::milliseconds(1500)))
   {
     uint8_t echoByte = ~(kwp[2]);
-    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    printf("readAckKeywordBytes(): got keyword sequence, sending ack of %02X ...", echoByte);
+    std::this_thread::sleep_for(std::chrono::milliseconds(25));
     if (writeSerial(&echoByte, 1) &&
         readSerial(&echoByte, 1))
     {
+      printf("done.\n");
       status = true;
     }
+    else
+    {
+      printf("failed.\n");
+    }
+  }
+  else
+  {
+    printf("readAckKeywordBytes(): didn't see keyword sequence\n");
   }
 
   return status;
