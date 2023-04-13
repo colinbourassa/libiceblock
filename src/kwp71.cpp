@@ -437,16 +437,13 @@ bool Kwp71::waitForByteSequence(const std::vector<uint8_t>& sequence,
   int matchedBytes = 0;
   const std::chrono::time_point start = std::chrono::steady_clock::now();
   const std::chrono::time_point end = start + timeout;
-  std::chrono::milliseconds elapsed =
-    std::chrono::duration_cast<std::chrono::milliseconds>(end - std::chrono::steady_clock::now());
 
-  while ((matchedBytes < sequence.size()) && (elapsed < timeout))
+  while ((matchedBytes < sequence.size()) && (std::chrono::steady_clock::now() < end))
   {
     if (ftdi_read_data(&m_ftdi, &curByte, 1) == 1)
     {
       matchedBytes += (curByte == sequence.at(matchedBytes)) ? 1 : 0;
     }
-    elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - std::chrono::steady_clock::now());
   }
 
   return (matchedBytes == sequence.size());
