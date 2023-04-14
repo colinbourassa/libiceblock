@@ -17,36 +17,32 @@ int main(int argc, char** argv)
   std::cout << "Calling connect(" << (int)addr << ")..." << std::endl;
   if (kwp.connect(0x0403, 0xfa20, addr))
   {
-    char ch;
-    do {
-      if (scanf("%c", &ch) == 1)
+    Kwp71Command cmd;
+    cmd.type = Kwp71PacketType::ReadParamData;
+    std::vector<uint8_t> response;
+    printf("Requesting command injection...\n");
+    if (kwp.sendCommand(cmd, response))
+    {
+      printf("Got %u bytes!\n", response.size());
+      for (int i = 0; i < response.size(); i++)
       {
-        printf("\nkeypress: %c\n", ch);
-        if (ch == 'i')
+        std::cout << " " << response[i];
+        if (i && (i % 16 == 0))
         {
-          std::vector<std::string> idResp;
-          if (kwp.requestIDInfo(idResp))
-          {
-            printf("Got %u strings!\n", idResp.size());
-            for (int i = 0; i < idResp.size(); i++)
-            {
-              std::cout << "    " << idResp[i] << std::endl;
-            }
-          }
-          else
-          {
-            printf("Failed to get ID response.\n");
-          }
+          std::cout << std::endl;
         }
       }
-    } while (ch != 'q');
+    }
+    else
+    {
+      printf("Failed to get response.\n");
+    }
+    kwp.disconnect();
   }
   else
   {
-    std::cout << "connect() failed" << std::endl;
+    printf("connect() failed\n");
   }
-  std::cout << "Calling shutdown()..." << std::endl;
-  kwp.disconnect();
 
   return status;
 }

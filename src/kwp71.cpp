@@ -46,11 +46,9 @@ bool Kwp71::connect(uint16_t vid, uint16_t pid, uint8_t addr)
       m_ecuAddr = addr;
       m_connectionActive = false;
 
-      if ((ftdi_usb_open(&m_ftdi, 0x0403, 0xfa20) == 0))
+      if ((ftdi_usb_open(&m_ftdi, vid, pid) == 0))
       {
         printf("ftdi_usb_open() success\n");
-        // TODO: probably don't need the reset
-        printf("ftdi_usb_reset() returned %d\n", ftdi_usb_reset(&m_ftdi));
         // TODO: parameterize the data bits and parity
         if (slowInit(m_ecuAddr, 8, 0))
         {
@@ -127,6 +125,7 @@ bool Kwp71::sendPacket()
   uint8_t ack = 0;
   uint8_t ackCompare = 0;
 
+  printf("send: ");
   while (status && (index <= m_sendPacketBuf[0]))
   {
     // Transmit the packet one byte at a time, reading back the same byte as
@@ -135,6 +134,7 @@ bool Kwp71::sendPacket()
     // Verify that the ack byte is the bitwise inversion of the sent byte.
     if (writeSerial(&m_sendPacketBuf[index], 1) && readSerial(&loopback, 1))
     {
+      printf("%02X ", m_sendPacketBuf[index]);
       if ((index < m_sendPacketBuf[0]))
       {
         ackCompare = ~(m_sendPacketBuf[index]);
@@ -148,7 +148,7 @@ bool Kwp71::sendPacket()
       status = false;
     }
   }
-  if (status) printf("sent: %02X\n", m_sendPacketBuf[2]);
+  printf("\n");
   return status;
 }
 
@@ -165,8 +165,10 @@ bool Kwp71::recvPacket()
   uint8_t loopback = 0;
   uint8_t ack = 0;
 
+  printf("recv: ");
   if (readSerial(&m_recvPacketBuf[0], 1))
   {
+    printf("%02X ", m_recvPacketBuf[0]);
     // ack the pkt length byte
     std::this_thread::sleep_for(std::chrono::milliseconds(2));
     ack = ~(m_recvPacketBuf[0]);
@@ -176,6 +178,7 @@ bool Kwp71::recvPacket()
     {
       if (readSerial(&m_recvPacketBuf[index], 1))
       {
+        printf("%02X ", m_recvPacketBuf[index]);
         // every byte except the last in the packet is ack'd
         if (index < m_recvPacketBuf[0])
         {
@@ -191,11 +194,11 @@ bool Kwp71::recvPacket()
         status = false;
       }
     }
+    printf("\n");
   }
 
   if (status)
   {
-    printf("recv:    %02X\n", m_recvPacketBuf[2]);
     processReceivedPacket();
   }
 
@@ -224,6 +227,13 @@ bool Kwp71::populatePacket(bool usePendingCommand)
 
   switch (type)
   {
+  /** TODO: implement missing packet types:
+   *  ActivateActuators
+   *  EraseTroubleCodes
+   *  ReadDACChannel
+   *  ReadParamData
+   *  RecordParamData
+   */
   case Kwp71PacketType::Empty:
   case Kwp71PacketType::ReadTroubleCodes:
   case Kwp71PacketType::RequestID:
@@ -530,6 +540,7 @@ void Kwp71::processReceivedPacket()
 
   switch (m_lastReceivedPacketType)
   {
+  // TODO: what action is required for these two packet types?
   case Kwp71PacketType::ParamRecordConf:
   case Kwp71PacketType::Snapshot:
     break;
@@ -593,6 +604,15 @@ void Kwp71::commLoop()
           {
             m_receivingData = false;
             m_responseReadSuccess = true;
+            m_responseCondVar.notify_one();
+          }
+        }
+        else if (m_lastReceivedPacketType == Kwp71PacketType::NACK)
+        {
+          if (m_receivingData)
+          {
+            m_receivingData = false;
+            m_responseReadSuccess = false;
             m_responseCondVar.notify_one();
           }
         }
