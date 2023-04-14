@@ -55,7 +55,7 @@ class Kwp71
 {
 public:
   Kwp71();
-  bool connect(uint16_t vid, uint16_t pid, uint8_t addr);
+  bool connect(uint16_t vid, uint16_t pid, uint8_t addr, int baud);
   void disconnect();
   bool requestIDInfo(std::vector<std::string>& idResponse);
   bool sendCommand(Kwp71Command cmd, std::vector<uint8_t>& response);
@@ -64,16 +64,15 @@ public:
 private:
   bool m_connectionActive;
   uint8_t m_ecuAddr;
+  int m_baudRate;
   bool m_shutdown;
   std::unique_ptr<std::thread> m_ifThreadPtr;
   std::string m_deviceName;
   uint8_t m_lastUsedSeqNum;
   uint8_t m_sendPacketBuf[256];
   uint8_t m_recvPacketBuf[256];
-
   Kwp71PacketType m_lastReceivedPacketType;
-  bool m_commandReady;
-  bool m_receivingData;
+  bool m_commandPending;
   std::vector<uint8_t> m_responseBinaryData;
   std::vector<std::string> m_responseStringData;
   Kwp71Command m_pendingCmd;
@@ -81,7 +80,7 @@ private:
   std::condition_variable m_responseCondVar;
   std::mutex m_responseMutex;
   std::mutex m_connectMutex;
-
+  std::mutex m_commandMutex;
   struct ftdi_context m_ftdi;
 
   static constexpr uint8_t s_endOfPacket = 0x03;
@@ -89,7 +88,7 @@ private:
   bool waitForByteSequence(const std::vector<uint8_t>& sequence,
                            std::chrono::milliseconds timeout);
   bool isConnectionActive() const;
-  bool populatePacket(bool usePendingCommand);
+  bool populatePacket(bool ecuReadyFroCommand);
   bool readAckKeywordBytes();
   bool setFtdiSerialProperties();
   void closeFtdi();
