@@ -72,10 +72,11 @@ private:
   uint8_t m_sendPacketBuf[256];
   uint8_t m_recvPacketBuf[256];
   Kwp71PacketType m_lastReceivedPacketType;
-  bool m_commandPending;
   std::vector<uint8_t> m_responseBinaryData;
   std::vector<std::string> m_responseStringData;
   Kwp71Command m_pendingCmd;
+  bool m_commandIsPending;
+  bool m_waitingForReply;
   bool m_responseReadSuccess;
   std::condition_variable m_responseCondVar;
   std::mutex m_responseMutex;
@@ -88,7 +89,7 @@ private:
   bool waitForByteSequence(const std::vector<uint8_t>& sequence,
                            std::chrono::milliseconds timeout);
   bool isConnectionActive() const;
-  bool populatePacket(bool ecuReadyFroCommand);
+  bool populatePacket(bool& usedPendingCommand);
   bool readAckKeywordBytes();
   bool setFtdiSerialProperties();
   void closeFtdi();
@@ -98,6 +99,7 @@ private:
   bool slowInit(uint8_t address, int databits, int parity);
   void commLoop();
   static void threadEntry(Kwp71* iface);
+  bool isValidCommandFromTester(Kwp71PacketType type) const;
 
   bool readSerial(uint8_t* buf, int count);
   bool writeSerial(uint8_t* buf, int count);

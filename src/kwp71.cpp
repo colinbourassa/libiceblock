@@ -23,7 +23,8 @@ Kwp71::Kwp71() :
   m_ifThreadPtr(nullptr),
   m_lastUsedSeqNum(0),
   m_lastReceivedPacketType(Kwp71PacketType::Empty),
-  m_commandPending(false),
+  m_commandIsPending(false),
+  m_waitingForReply(false),
   m_responseReadSuccess(false)
 {
 }
@@ -50,7 +51,6 @@ bool Kwp71::connect(uint16_t vid, uint16_t pid, uint8_t addr, int baud)
     {
       if ((ftdi_usb_open(&m_ftdi, vid, pid) == 0))
       {
-        printf("ftdi_usb_open() success\n");
         // TODO: parameterize the data bits and parity
         if (slowInit(m_ecuAddr, 8, 0))
         {
@@ -126,6 +126,9 @@ bool Kwp71::sendPacket()
   uint8_t loopback = 0;
   uint8_t ack = 0;
   uint8_t ackCompare = 0;
+  bool usedPendingCommand = false;
+
+  populatePacket(usedPendingCommand);
 
   printf("send: ");
   while (status && (index <= m_sendPacketBuf[0]))
@@ -151,6 +154,16 @@ bool Kwp71::sendPacket()
     }
   }
   printf("\n");
+
+  // if we had been waiting to send a command packet (i.e. not just an 09/ACK),
+  // then this sendPacket() call would have transmitted it so the 'pending'
+  // flag may be cleared
+  if (status && usedPendingCommand)
+  {
+    m_commandIsPending = false;
+    m_waitingForReply = true;
+  }
+
   return status;
 }
 
@@ -210,21 +223,25 @@ bool Kwp71::recvPacket()
 /**
  * Populates a local buffer with the contents of a packet to be transmitted.
  */
-bool Kwp71::populatePacket(bool ecuReadyForCmd)
+bool Kwp71::populatePacket(bool& usedPendingCommand)
 {
   bool status = false;
   Kwp71PacketType type;
   std::vector<uint8_t> payload;
 
-  if (ecuReadyForCmd && m_commandPending)
+  const bool ecuReadyForCmd = (m_lastReceivedPacketType == Kwp71PacketType::Empty);
+
+  if (ecuReadyForCmd && m_commandIsPending)
   {
     type = m_pendingCmd.type;
     payload = m_pendingCmd.payload;
+    usedPendingCommand = true;
   }
   else
   {
     type = Kwp71PacketType::Empty;
     payload = {};
+    usedPendingCommand = false;
   }
 
   switch (type)
@@ -241,9 +258,13 @@ bool Kwp71::populatePacket(bool ecuReadyForCmd)
   case Kwp71PacketType::RequestID:
   case Kwp71PacketType::RequestSnapshot:
   case Kwp71PacketType::Disconnect:
-  case Kwp71PacketType::ReadParamData:
     status = true;
     m_sendPacketBuf[0] = 0x03;
+    break;
+  case Kwp71PacketType::ReadParamData:
+    status = true;
+    m_sendPacketBuf[0] = 0x04;
+    m_sendPacketBuf[3] = payload[0];
     break;
   case Kwp71PacketType::ReadDACChannel:
     if (payload.size() == 1)
@@ -488,7 +509,7 @@ bool Kwp71::requestIDInfo(std::vector<std::string>& idResponse)
 
   m_pendingCmd.type = Kwp71PacketType::RequestID;
   m_pendingCmd.payload = std::vector<uint8_t>();
-  m_commandPending = true;
+  m_commandIsPending = true;
 
   // wait until the response from this command has been completely received
   {
@@ -505,29 +526,54 @@ bool Kwp71::requestIDInfo(std::vector<std::string>& idResponse)
   return m_responseReadSuccess;
 }
 
+bool Kwp71::isValidCommandFromTester(Kwp71PacketType type) const
+{
+  switch (type)
+  {
+  case Kwp71PacketType::RequestID:
+  case Kwp71PacketType::ReadRAM:
+  case Kwp71PacketType::WriteRAM:
+  case Kwp71PacketType::ReadROM:
+  case Kwp71PacketType::ActivateActuators:
+  case Kwp71PacketType::EraseTroubleCodes:
+  case Kwp71PacketType::ReadTroubleCodes:
+  case Kwp71PacketType::ReadDACChannel:
+  case Kwp71PacketType::ReadParamData:
+  case Kwp71PacketType::RecordParamData:
+  case Kwp71PacketType::RequestSnapshot:
+  case Kwp71PacketType::ReadEEPROM:
+  case Kwp71PacketType::WriteEEPROM:
+    return true;
+  default:
+    return false;
+  }
+}
+
 /**
  * Queues a command to be sent to the ECU at the next opportunity, and waits
  * to receive the response.
  */
 bool Kwp71::sendCommand(Kwp71Command cmd, std::vector<uint8_t>& response)
 {
+  if (!isValidCommandFromTester(cmd.type))
+  {
+    return false;
+  }
+
   // wait until any previous command has been fully processed
   std::unique_lock<std::mutex> lock(m_commandMutex);
 
   m_pendingCmd = cmd;
-  m_commandPending = true;
+  m_commandIsPending = true;
 
   // wait until the response from this command has been completely received
   {
-    printf("sendCommand() getting responseMutex lock\n");
     std::unique_lock<std::mutex> responseLock(m_responseMutex);
-    printf("sendCommand() waiting on condvar\n");
     m_responseCondVar.wait(responseLock);
   }
 
   if (m_responseReadSuccess)
   {
-    printf("got response!\n");
     response = m_responseBinaryData;
     m_responseBinaryData.clear();
   }
@@ -596,14 +642,12 @@ void Kwp71::commLoop()
     }
 
     // The ECU apparently sends its ID info unsolicited next
-    printf("waiting for unsolicited ID info...\n");
     do {
       if (recvPacket())
       {
         // ACK until the ECU sends its first empty packet (after the ID info)
         if (m_lastReceivedPacketType != Kwp71PacketType::Empty)
         {
-          populatePacket(false);
           sendPacket();
         }
       }
@@ -613,15 +657,10 @@ void Kwp71::commLoop()
       }
     } while ((m_lastReceivedPacketType != Kwp71PacketType::Empty) && !m_shutdown);
 
-    printf("starting main connection loop\n");
-
     // continue taking turns with the ECU, sending one packet per turn
     while (m_connectionActive && !m_shutdown)
     {
-      if (populatePacket(m_lastReceivedPacketType == Kwp71PacketType::Empty))
-      {
-        sendPacket();
-      }
+      sendPacket();
 
       if (recvPacket())
       {
@@ -629,18 +668,18 @@ void Kwp71::commLoop()
         // then we can send a command of our own (if we have one available)
         if (m_lastReceivedPacketType == Kwp71PacketType::Empty)
         {
-          if (m_commandPending)
+          if (m_waitingForReply)
           {
-            m_commandPending = false;
+            m_waitingForReply = false;
             m_responseReadSuccess = true;
             m_responseCondVar.notify_one();
           }
         }
         else if (m_lastReceivedPacketType == Kwp71PacketType::NACK)
         {
-          if (m_commandPending)
+          if (m_waitingForReply)
           {
-            m_commandPending = false;
+            m_waitingForReply = false;
             m_responseReadSuccess = false;
             m_responseCondVar.notify_one();
           }
@@ -648,9 +687,9 @@ void Kwp71::commLoop()
       }
       else
       {
-        if (m_commandPending)
+        if (m_waitingForReply)
         {
-          m_commandPending = false;
+          m_waitingForReply = false;
           m_responseReadSuccess = false;
           m_responseCondVar.notify_one();
         }

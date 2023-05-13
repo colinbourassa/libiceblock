@@ -15,25 +15,23 @@ int main(int argc, char** argv)
   Kwp71 kwp;
   if (kwp.connect(0x0403, 0xfa20, 0x10, 4800))
   {
-    Kwp71Command cmd;
-    cmd.type = Kwp71PacketType::ReadParamData;
-    std::vector<uint8_t> response;
-    printf("Requesting command injection...\n");
-    if (kwp.sendCommand(cmd, response))
+    for (uint8_t paramIndex = 0; paramIndex < 0x5; paramIndex++)
     {
-      printf("Got %u bytes!\n", response.size());
-      for (int i = 0; i < response.size(); i++)
+      // Trying to determine the correct format of the ReadParamData command.
+      // So far, simply sending a single byte payload isn't producing any result
+      // other than a NACK from the ECU...
+      Kwp71Command cmd;
+      cmd.type = Kwp71PacketType::ReadParamData;
+      cmd.payload = std::vector<uint8_t>({ paramIndex });
+      std::vector<uint8_t> response;
+      if (kwp.sendCommand(cmd, response))
       {
-        std::cout << " " << response[i];
-        if (i && (i % 16 == 0))
-        {
-          std::cout << std::endl;
-        }
+        printf("\nGot valid response for payload %02X (%d byte response payload).\n", paramIndex, response.size());
       }
-    }
-    else
-    {
-      printf("Failed to get response.\n");
+      else
+      {
+        //printf("\nFailed to get valid response.\n");
+      }
     }
     kwp.disconnect();
   }
