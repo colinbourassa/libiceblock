@@ -20,6 +20,8 @@ Kwp71::Kwp71(bool verbose) :
   m_connectionActive(false),
   m_ecuAddr(0),
   m_baudRate(4800),
+  m_initDataBits(8),
+  m_initParity(0),
   m_shutdown(false),
   m_ifThreadPtr(nullptr),
   m_lastUsedSeqNum(0),
@@ -193,7 +195,7 @@ bool Kwp71::sendPacket()
 bool Kwp71::recvPacket()
 {
   bool status = true;
-  uint8_t index = 1;
+  uint16_t index = 1;
   uint8_t loopback = 0;
   uint8_t ack = 0;
 
@@ -506,8 +508,16 @@ bool Kwp71::waitForByteSequence(const std::vector<uint8_t>& sequence,
   {
     if (ftdi_read_data(&m_ftdi, &curByte, 1) == 1)
     {
-      matchedBytes += (curByte == sequence.at(matchedBytes)) ? 1 : 0;
+      if (curByte == sequence.at(matchedBytes))
+      {
+        matchedBytes++;
+      }
+      else
+      {
+        matchedBytes = 0;
+      }
     }
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
 
   return (matchedBytes == sequence.size());
@@ -618,42 +628,56 @@ bool Kwp71::sendCommand(Kwp71Command cmd, std::vector<uint8_t>& response)
 
 bool Kwp71::readRAM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data)
 {
-  Kwp71Command cmd;
-  cmd.type = Kwp71PacketType::ReadRAM;
-  cmd.payload = std::vector<uint8_t>({
-    numBytes,
-    static_cast<uint8_t>(addr >> 8),
-    static_cast<uint8_t>(addr & 0xff)
-  });
+  bool status = false;
 
-  return sendCommand(cmd, data);
+  if (numBytes <= (UINT8_MAX - 3))
+  {
+    Kwp71Command cmd;
+    cmd.type = Kwp71PacketType::ReadRAM;
+    cmd.payload = std::vector<uint8_t>({
+      numBytes,
+      static_cast<uint8_t>(addr >> 8),
+      static_cast<uint8_t>(addr & 0xff)
+    });
+    status = sendCommand(cmd, data);
+  }
+  return status;
 }
 
 bool Kwp71::readROM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data)
 {
-  Kwp71Command cmd;
-  cmd.type = Kwp71PacketType::ReadROM;
-  cmd.payload = std::vector<uint8_t>({
-    numBytes,
-    static_cast<uint8_t>(addr >> 8),
-    static_cast<uint8_t>(addr & 0xff)
-  });
+  bool status = false;
 
-  return sendCommand(cmd, data);
+  if (numBytes <= (UINT8_MAX - 3))
+  {
+    Kwp71Command cmd;
+    cmd.type = Kwp71PacketType::ReadROM;
+    cmd.payload = std::vector<uint8_t>({
+      numBytes,
+      static_cast<uint8_t>(addr >> 8),
+      static_cast<uint8_t>(addr & 0xff)
+    });
+    status = sendCommand(cmd, data);
+  }
+  return status;
 }
 
 bool Kwp71::readEEPROM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data)
 {
-  Kwp71Command cmd;
-  cmd.type = Kwp71PacketType::ReadEEPROM;
-  cmd.payload = std::vector<uint8_t>(
-  {
-    numBytes,
-    static_cast<uint8_t>(addr >> 8),
-    static_cast<uint8_t>(addr & 0xff)
-  });
+  bool status = false;
 
-  return sendCommand(cmd, data);
+  if (numBytes <= (UINT8_MAX - 3))
+  {
+    Kwp71Command cmd;
+    cmd.type = Kwp71PacketType::ReadEEPROM;
+    cmd.payload = std::vector<uint8_t>({
+      numBytes,
+      static_cast<uint8_t>(addr >> 8),
+      static_cast<uint8_t>(addr & 0xff)
+    });
+    status = sendCommand(cmd, data);
+  }
+  return status;
 }
 
 bool Kwp71::writeRAM(uint16_t addr, const std::vector<uint8_t>& data)
@@ -752,6 +776,8 @@ void Kwp71::threadEntry(Kwp71* iface)
 /**
  * Loop that maintains a connection with the ECU. When no particular
  * command is queued, the empty/ACK (09) command is sent as a keepalive.
+ * Any other commands are sent, one at a time, and the responses is
+ * collected before the next command is sent.
  */
 void Kwp71::commLoop()
 {
@@ -761,8 +787,7 @@ void Kwp71::commLoop()
     // re-attempting the 5-baud slow init if necessary
     while (!m_connectionActive && !m_shutdown)
     {
-      // TODO: parameterize the data bit count and parity
-      if (slowInit(m_ecuAddr, 8, 0) &&
+      if (slowInit(m_ecuAddr, m_initDataBits, m_initParity) &&
           setFtdiSerialProperties())
       {
         m_connectionActive = readAckKeywordBytes();

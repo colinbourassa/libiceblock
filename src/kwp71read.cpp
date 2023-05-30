@@ -25,18 +25,19 @@ int main(int argc, char** argv)
     printf("Connected successfully.\n");
     std::vector<uint8_t> data;
 
-    const int bytecount = 128;
+    const uint8_t bytecount = 252;
     if (kwp.readROM(0x0000, bytecount, data))
     {
       printf("Successfully read %d bytes.\n", bytecount);
-      for (int row = 0; row < 8; row++)
+      for (int index = 0; index < bytecount; index++)
       {
-        for (int col = 0; col < 16; col++)
+        if (index && (index % 16 == 0))
         {
-          printf(" %02X", data[row * 8 + col]);
+          printf("\n");
         }
-        printf("\n");
+        printf(" %02X", data[index]);
       }
+      printf("\n");
     }
     else
     {

@@ -71,6 +71,8 @@ private:
   bool m_connectionActive;
   uint8_t m_ecuAddr;
   int m_baudRate;
+  int m_initDataBits;
+  int m_initParity;
   bool m_shutdown;
   std::unique_ptr<std::thread> m_ifThreadPtr;
   std::string m_deviceName;
