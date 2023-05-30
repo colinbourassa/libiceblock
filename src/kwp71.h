@@ -54,14 +54,20 @@ struct Kwp71Version
 class Kwp71
 {
 public:
-  Kwp71();
-  bool connect(uint16_t vid, uint16_t pid, uint8_t addr, int baud);
+  Kwp71(bool verbose = false);
+  bool connect(uint16_t vid, uint16_t pid, uint8_t addr, int baud, int& err);
   void disconnect();
   bool requestIDInfo(std::vector<std::string>& idResponse);
   bool sendCommand(Kwp71Command cmd, std::vector<uint8_t>& response);
+  bool readRAM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data);
+  bool readROM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data);
+  bool readEEPROM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data);
+  bool writeRAM(uint16_t addr, const std::vector<uint8_t>& data);
+  bool writeEEPROM(uint16_t addr, const std::vector<uint8_t>& data);
   static Kwp71Version getLibraryVersion();
 
 private:
+  bool m_verbose;
   bool m_connectionActive;
   uint8_t m_ecuAddr;
   int m_baudRate;

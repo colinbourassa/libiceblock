@@ -1,5 +1,5 @@
 #include "kwp71.h"
-#include <iostream>
+#include <stdio.h>
 #include <chrono>
 #include <mutex>
 #include <unistd.h>
@@ -15,7 +15,8 @@ Kwp71Version Kwp71::getLibraryVersion()
   return ver;
 }
 
-Kwp71::Kwp71() :
+Kwp71::Kwp71(bool verbose) :
+  m_verbose(verbose),
   m_connectionActive(false),
   m_ecuAddr(0),
   m_baudRate(4800),
@@ -34,7 +35,7 @@ Kwp71::Kwp71() :
  * opens the serial port device, using it to read the ECU's keyword bytes.
  * Returns true if all of this is successful; false otherwise.
  */
-bool Kwp71::connect(uint16_t vid, uint16_t pid, uint8_t addr, int baud)
+bool Kwp71::connect(uint16_t vid, uint16_t pid, uint8_t addr, int baud, int& err)
 {
   bool status = false;
   std::unique_lock<std::mutex> lock(m_connectMutex);
@@ -60,31 +61,37 @@ bool Kwp71::connect(uint16_t vid, uint16_t pid, uint8_t addr, int baud)
             {
               m_connectionActive = true;
               m_ifThreadPtr = std::make_unique<std::thread>(threadEntry, this);
+              err = 0;
               status = true;
             }
             else
             {
-              printf("readAckKeywordBytes() failed\n");
+              // readAckKeywordBytes() failed
+              err = -1;
             }
           }
           else
           {
-            printf("setFtdiSerialProperties() failed\n");
+            // setFtdiSerialProperties() failed
+            err = -2;
           }
         }
         else
         {
-          printf("slowInit() failed\n");
+          // slowInit() failed
+          err = -3;
         }
       }
       else
       {
-        printf("ftdi_usb_open() failed\n");
+        // ftdi_usb_open() failed
+        err = -4;
       }
     }
     else
     {
-      printf("ftdi_init() or ftdi_set_interface() failed\n");
+      // ftdi_init() or ftdi_set_interface() failed
+      err = -5;
     }
   }
 
@@ -130,7 +137,11 @@ bool Kwp71::sendPacket()
 
   populatePacket(usedPendingCommand);
 
-  printf("send: ");
+  if (m_verbose)
+  {
+    printf("send: ");
+  }
+
   while (status && (index <= m_sendPacketBuf[0]))
   {
     // Transmit the packet one byte at a time, reading back the same byte as
@@ -139,7 +150,10 @@ bool Kwp71::sendPacket()
     // Verify that the ack byte is the bitwise inversion of the sent byte.
     if (writeSerial(&m_sendPacketBuf[index], 1) && readSerial(&loopback, 1))
     {
-      printf("%02X ", m_sendPacketBuf[index]);
+      if (m_verbose)
+      {
+        printf("%02X ", m_sendPacketBuf[index]);
+      }
       if ((index < m_sendPacketBuf[0]))
       {
         ackCompare = ~(m_sendPacketBuf[index]);
@@ -153,7 +167,10 @@ bool Kwp71::sendPacket()
       status = false;
     }
   }
-  printf("\n");
+  if (m_verbose)
+  {
+    printf("\n");
+  }
 
   // if we had been waiting to send a command packet (i.e. not just an 09/ACK),
   // then this sendPacket() call would have transmitted it so the 'pending'
@@ -180,10 +197,17 @@ bool Kwp71::recvPacket()
   uint8_t loopback = 0;
   uint8_t ack = 0;
 
-  printf("recv: ");
+  if (m_verbose)
+  {
+    printf("recv: ");
+  }
+
   if (readSerial(&m_recvPacketBuf[0], 1))
   {
-    printf("%02X ", m_recvPacketBuf[0]);
+    if (m_verbose)
+    {
+      printf("%02X ", m_recvPacketBuf[0]);
+    }
     // ack the pkt length byte
     std::this_thread::sleep_for(std::chrono::milliseconds(2));
     ack = ~(m_recvPacketBuf[0]);
@@ -193,7 +217,11 @@ bool Kwp71::recvPacket()
     {
       if (readSerial(&m_recvPacketBuf[index], 1))
       {
-        printf("%02X ", m_recvPacketBuf[index]);
+        if (m_verbose)
+        {
+          printf("%02X ", m_recvPacketBuf[index]);
+        }
+
         // every byte except the last in the packet is ack'd
         if (index < m_recvPacketBuf[0])
         {
@@ -205,11 +233,17 @@ bool Kwp71::recvPacket()
       }
       else
       {
-        std::cerr << std::endl << "Timed out while receiving packet data!" << std::endl;
+        if (m_verbose)
+        {
+          fprintf(stderr, "Timed out while receiving packet data!\n");
+        }
         status = false;
       }
     }
-    printf("\n");
+    if (m_verbose)
+    {
+      printf("\n");
+    }
   }
 
   if (status)
@@ -263,8 +297,8 @@ bool Kwp71::populatePacket(bool& usedPendingCommand)
     break;
   case Kwp71PacketType::ReadParamData:
     status = true;
-    m_sendPacketBuf[0] = 0x04;
-    m_sendPacketBuf[3] = payload[0];
+    m_sendPacketBuf[0] = payload.size() + 0x03;
+    memcpy(&m_sendPacketBuf[3], &payload[0], payload.size());
     break;
   case Kwp71PacketType::ReadDACChannel:
     if (payload.size() == 1)
@@ -319,22 +353,19 @@ bool Kwp71::setFtdiSerialProperties()
     if (status == 0)
     {
       status = ftdi_set_latency_timer(&m_ftdi, 1);
-      if (status != 0)
+      if ((status != 0) && m_verbose)
       {
-        std::cerr << "Failed to set FTDI latency timer (" << status << "), " <<
-          ftdi_get_error_string(&m_ftdi) << std::endl;
+        fprintf(stderr, "Failed to set FTDI latency timer (\"%s\")\n", ftdi_get_error_string(&m_ftdi));
       }
     }
-    else
+    else if (m_verbose)
     {
-      std::cerr << "Failed to set FTDI line properties (" << status << "), " <<
-        ftdi_get_error_string(&m_ftdi) << std::endl;
+      fprintf(stderr, "Failed to set FTDI line properties (\"%s\")\n", ftdi_get_error_string(&m_ftdi));
     }
   }
-  else
+  else if (m_verbose)
   {
-    std::cerr << "Failed to set FTDI baud rate (" << status << "), " <<
-      ftdi_get_error_string(&m_ftdi) << std::endl;
+    fprintf(stderr, "Failed to set FTDI baud rate (\"%s\")\n", ftdi_get_error_string(&m_ftdi));
   }
   return (status == 0);
 }
@@ -394,7 +425,11 @@ bool Kwp71::slowInit(uint8_t address, int databits, int parity)
   int bitindex = 0;
   int parityCount = 0;
 
-  printf("performing slow init (addr %02X, %d data bits, %d parity)...\n", address, databits, parity);
+  if (m_verbose)
+  {
+    printf("Performing slow init (addr %02X, %d data bits, %d parity)...\n", address, databits, parity);
+  }
+
   // Enable bitbang mode with a single output line (TXD)
   if ((f = ftdi_set_bitmode(&m_ftdi, 0x01, BITMODE_BITBANG)) == 0)
   {
@@ -439,14 +474,14 @@ bool Kwp71::slowInit(uint8_t address, int databits, int parity)
       ftdi_tcioflush(&m_ftdi);
       status = true;
     }
-    else
+    else if (m_verbose)
     {
-      std::cerr << "Failed to disable bitbang mode" << std::endl;
+      fprintf(stderr, "Failed to disable bitbang mode\n");
     }
   }
-  else
+  else if (m_verbose)
   {
-    std::cerr << "Failed to set bitbang mode" << std::endl;
+    fprintf(stderr, "Failed to set bitbang mode\n");
   }
 
   return status;
@@ -581,6 +616,96 @@ bool Kwp71::sendCommand(Kwp71Command cmd, std::vector<uint8_t>& response)
   return m_responseReadSuccess;
 }
 
+bool Kwp71::readRAM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data)
+{
+  Kwp71Command cmd;
+  cmd.type = Kwp71PacketType::ReadRAM;
+  cmd.payload = std::vector<uint8_t>({
+    numBytes,
+    static_cast<uint8_t>(addr >> 8),
+    static_cast<uint8_t>(addr & 0xff)
+  });
+
+  return sendCommand(cmd, data);
+}
+
+bool Kwp71::readROM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data)
+{
+  Kwp71Command cmd;
+  cmd.type = Kwp71PacketType::ReadROM;
+  cmd.payload = std::vector<uint8_t>({
+    numBytes,
+    static_cast<uint8_t>(addr >> 8),
+    static_cast<uint8_t>(addr & 0xff)
+  });
+
+  return sendCommand(cmd, data);
+}
+
+bool Kwp71::readEEPROM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data)
+{
+  Kwp71Command cmd;
+  cmd.type = Kwp71PacketType::ReadEEPROM;
+  cmd.payload = std::vector<uint8_t>(
+  {
+    numBytes,
+    static_cast<uint8_t>(addr >> 8),
+    static_cast<uint8_t>(addr & 0xff)
+  });
+
+  return sendCommand(cmd, data);
+}
+
+bool Kwp71::writeRAM(uint16_t addr, const std::vector<uint8_t>& data)
+{
+  bool status = false;
+
+  // Limit the maximum write payload to the size of the remaining
+  // space in a single packet (after accounting for the header/trailer).
+  if (data.size() <= (UINT8_MAX - 6)) // 249 bytes max
+  {
+    Kwp71Command cmd;
+    cmd.type = Kwp71PacketType::WriteRAM;
+    cmd.payload = std::vector<uint8_t>(
+    {
+      static_cast<uint8_t>(data.size()),
+      static_cast<uint8_t>(addr >> 8),
+      static_cast<uint8_t>(addr & 0xff)
+    });
+    cmd.payload.insert(cmd.payload.end(), data.begin(), data.end());
+
+    std::vector<uint8_t> response;
+    status = sendCommand(cmd, response);
+  }
+
+  return status;
+}
+
+bool Kwp71::writeEEPROM(uint16_t addr, const std::vector<uint8_t>& data)
+{
+  bool status = false;
+
+  // Limit the maximum write payload to the size of the remaining
+  // space in a single packet (after accounting for the header/trailer).
+  if (data.size() <= (UINT8_MAX - 6)) // 249 bytes max
+  {
+    Kwp71Command cmd;
+    cmd.type = Kwp71PacketType::WriteRAM;
+    cmd.payload = std::vector<uint8_t>(
+    {
+      static_cast<uint8_t>(data.size()),
+      static_cast<uint8_t>(addr >> 8),
+      static_cast<uint8_t>(addr & 0xff)
+    });
+    cmd.payload.insert(cmd.payload.end(), data.begin(), data.end());
+
+    std::vector<uint8_t> response;
+    status = sendCommand(cmd, response);
+  }
+
+  return status;
+}
+
 /**
  * Parses the data in the received packet buffer and takes the appropriate
  * action to package and return the data.
@@ -606,6 +731,9 @@ void Kwp71::processReceivedPacket()
   case Kwp71PacketType::ROMContent:
   case Kwp71PacketType::EEPROMContent:
   case Kwp71PacketType::ParametricData:
+    // capture just the payload data of the packet (i.e. the bytes
+    // *after* the length, seq. num, and packet type, and *before*
+    // the 0x03 end-of-packet marker
     m_responseBinaryData.insert(m_responseBinaryData.end(),
                                 &m_recvPacketBuf[3],
                                 &m_recvPacketBuf[3 + payloadLen]);
@@ -693,7 +821,10 @@ void Kwp71::commLoop()
           m_responseReadSuccess = false;
           m_responseCondVar.notify_one();
         }
-        std::cerr << "ECU didn't respond during its turn" << std::endl;
+        if (m_verbose)
+        {
+          fprintf(stderr, "ECU didn't respond during its turn\n");
+        }
         m_connectionActive = false;
       }
     }

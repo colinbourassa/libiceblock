@@ -1,43 +1,55 @@
-#include <iostream>
 #include <stdio.h>
 #include <stdint.h>
-#include <stdlib.h>
 #include "kwp71.h"
+
+#define FTDI_VID 0x0403
+#define FTDI_PID 0xfa20
+#define ECU_ADDR 0x10
+#define ECU_BAUD 4800
 
 int main(int argc, char** argv)
 {
   int status = 0;
   const Kwp71Version ver = Kwp71::getLibraryVersion();
 
-  std::cout << "kwp71read using libkwp71 v" <<
-    (int)ver.major << "." << (int)ver.minor << "." << (int)ver.patch << std::endl;
+  printf("kwp71read using libkwp71 v%d.%d.%d\n",
+    ver.major, ver.minor, ver.patch);
 
   Kwp71 kwp;
-  if (kwp.connect(0x0403, 0xfa20, 0x10, 4800))
+  int err = 0;
+  printf("Attempting connection via FTDI %04x/%04x to ECU addr %02x with baud %d...\n",
+    FTDI_VID, FTDI_PID, ECU_ADDR, ECU_BAUD);
+
+  if (kwp.connect(FTDI_VID, FTDI_PID, ECU_ADDR, ECU_BAUD, err))
   {
-    for (uint8_t paramIndex = 0; paramIndex < 0x5; paramIndex++)
+    printf("Connected successfully.\n");
+    std::vector<uint8_t> data;
+
+    const int bytecount = 128;
+    if (kwp.readROM(0x0000, bytecount, data))
     {
-      // Trying to determine the correct format of the ReadParamData command.
-      // So far, simply sending a single byte payload isn't producing any result
-      // other than a NACK from the ECU...
-      Kwp71Command cmd;
-      cmd.type = Kwp71PacketType::ReadParamData;
-      cmd.payload = std::vector<uint8_t>({ paramIndex });
-      std::vector<uint8_t> response;
-      if (kwp.sendCommand(cmd, response))
+      printf("Successfully read %d bytes.\n", bytecount);
+      for (int row = 0; row < 8; row++)
       {
-        printf("\nGot valid response for payload %02X (%d byte response payload).\n", paramIndex, response.size());
-      }
-      else
-      {
-        //printf("\nFailed to get valid response.\n");
+        for (int col = 0; col < 16; col++)
+        {
+          printf(" %02X", data[row * 8 + col]);
+        }
+        printf("\n");
       }
     }
+    else
+    {
+      printf("readRAM() failed.\n");
+      status = -2;
+    }
+
     kwp.disconnect();
   }
   else
   {
-    printf("connect() failed\n");
+    printf("connect() failed.\n");
+    status = -1;
   }
 
   return status;
