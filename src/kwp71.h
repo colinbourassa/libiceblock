@@ -9,7 +9,7 @@
 #include <libftdi1/ftdi.h>
 #include "kwp71_version.h"
 
-enum class Kwp71PacketType
+enum class Kwp71BlockType
 {
   RequestID         = 0x00,
   ReadRAM           = 0x01,
@@ -40,7 +40,7 @@ enum class Kwp71PacketType
 
 struct Kwp71Command
 {
-  Kwp71PacketType type;
+  Kwp71BlockType type;
   std::vector<uint8_t> payload;
 };
 
@@ -77,9 +77,9 @@ private:
   std::unique_ptr<std::thread> m_ifThreadPtr;
   std::string m_deviceName;
   uint8_t m_lastUsedSeqNum;
-  uint8_t m_sendPacketBuf[256];
-  uint8_t m_recvPacketBuf[256];
-  Kwp71PacketType m_lastReceivedPacketType;
+  uint8_t m_sendBlockBuf[256];
+  uint8_t m_recvBlockBuf[256];
+  Kwp71BlockType m_lastReceivedBlockType;
   std::vector<uint8_t> m_responseBinaryData;
   std::vector<std::string> m_responseStringData;
   Kwp71Command m_pendingCmd;
@@ -92,22 +92,22 @@ private:
   std::mutex m_commandMutex;
   struct ftdi_context m_ftdi;
 
-  static constexpr uint8_t s_endOfPacket = 0x03;
+  static constexpr uint8_t s_endOfBlock = 0x03;
 
   bool waitForByteSequence(const std::vector<uint8_t>& sequence,
                            std::chrono::milliseconds timeout);
   bool isConnectionActive() const;
-  bool populatePacket(bool& usedPendingCommand);
+  bool populateBlock(bool& usedPendingCommand);
   bool readAckKeywordBytes();
   bool setFtdiSerialProperties();
   void closeFtdi();
-  bool sendPacket();
-  bool recvPacket();
-  void processReceivedPacket();
+  bool sendBlock();
+  bool recvBlock();
+  void processReceivedBlock();
   bool slowInit(uint8_t address, int databits, int parity);
   void commLoop();
   static void threadEntry(Kwp71* iface);
-  bool isValidCommandFromTester(Kwp71PacketType type) const;
+  bool isValidCommandFromTester(Kwp71BlockType type) const;
 
   bool readSerial(uint8_t* buf, int count);
   bool writeSerial(uint8_t* buf, int count);

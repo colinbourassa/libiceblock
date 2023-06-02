@@ -25,7 +25,7 @@ Kwp71::Kwp71(bool verbose) :
   m_shutdown(false),
   m_ifThreadPtr(nullptr),
   m_lastUsedSeqNum(0),
-  m_lastReceivedPacketType(Kwp71PacketType::Empty),
+  m_lastReceivedBlockType(Kwp71BlockType::Empty),
   m_commandIsPending(false),
   m_waitingForReply(false),
   m_responseReadSuccess(false)
@@ -123,12 +123,12 @@ bool Kwp71::isConnectionActive() const
 }
 
 /**
- * Sends a KWP-71 packet by transmitting it one byte at a time and waiting
+ * Sends a KWP-71 block by transmitting it one byte at a time and waiting
  * for positive acknowledgement of each byte by the receiving ECU.
  * Returns true if every byte (except the last) is met with a bitwise
  * inversion of that byte in response from the ECU; false otherwise.
  */
-bool Kwp71::sendPacket()
+bool Kwp71::sendBlock()
 {
   bool status = true;
   uint8_t index = 0;
@@ -137,28 +137,28 @@ bool Kwp71::sendPacket()
   uint8_t ackCompare = 0;
   bool usedPendingCommand = false;
 
-  populatePacket(usedPendingCommand);
+  populateBlock(usedPendingCommand);
 
   if (m_verbose)
   {
     printf("send: ");
   }
 
-  while (status && (index <= m_sendPacketBuf[0]))
+  while (status && (index <= m_sendBlockBuf[0]))
   {
-    // Transmit the packet one byte at a time, reading back the same byte as
+    // Transmit the block one byte at a time, reading back the same byte as
     // it appears in the Rx buffer (due to the loopback) and then reading the
     // acknowledgement byte from the ECU (for every byte except the last).
     // Verify that the ack byte is the bitwise inversion of the sent byte.
-    if (writeSerial(&m_sendPacketBuf[index], 1) && readSerial(&loopback, 1))
+    if (writeSerial(&m_sendBlockBuf[index], 1) && readSerial(&loopback, 1))
     {
       if (m_verbose)
       {
-        printf("%02X ", m_sendPacketBuf[index]);
+        printf("%02X ", m_sendBlockBuf[index]);
       }
-      if ((index < m_sendPacketBuf[0]))
+      if ((index < m_sendBlockBuf[0]))
       {
-        ackCompare = ~(m_sendPacketBuf[index]);
+        ackCompare = ~(m_sendBlockBuf[index]);
         status = readSerial(&ack, 1) && (ack == ackCompare);
       }
       std::this_thread::sleep_for(std::chrono::milliseconds(2));
@@ -174,8 +174,8 @@ bool Kwp71::sendPacket()
     printf("\n");
   }
 
-  // if we had been waiting to send a command packet (i.e. not just an 09/ACK),
-  // then this sendPacket() call would have transmitted it so the 'pending'
+  // if we had been waiting to send a command block (i.e. not just an 09/ACK),
+  // then this sendBlock() call would have transmitted it so the 'pending'
   // flag may be cleared
   if (status && usedPendingCommand)
   {
@@ -187,12 +187,12 @@ bool Kwp71::sendPacket()
 }
 
 /**
- * Reads a packet from the serial port, the length of which is determined by
+ * Reads a block from the serial port, the length of which is determined by
  * the first byte. Each byte (except the last) is positively acknowledged with
  * its bitwise inversion. Returns true if all the expected bytes are received,
  * false otherwise.
  */
-bool Kwp71::recvPacket()
+bool Kwp71::recvBlock()
 {
   bool status = true;
   uint16_t index = 1;
@@ -204,31 +204,31 @@ bool Kwp71::recvPacket()
     printf("recv: ");
   }
 
-  if (readSerial(&m_recvPacketBuf[0], 1))
+  if (readSerial(&m_recvBlockBuf[0], 1))
   {
     if (m_verbose)
     {
-      printf("%02X ", m_recvPacketBuf[0]);
+      printf("%02X ", m_recvBlockBuf[0]);
     }
     // ack the pkt length byte
     std::this_thread::sleep_for(std::chrono::milliseconds(2));
-    ack = ~(m_recvPacketBuf[0]);
+    ack = ~(m_recvBlockBuf[0]);
     status = writeSerial(&ack, 1) && readSerial(&loopback, 1);
 
-    while (status && (index <= m_recvPacketBuf[0]))
+    while (status && (index <= m_recvBlockBuf[0]))
     {
-      if (readSerial(&m_recvPacketBuf[index], 1))
+      if (readSerial(&m_recvBlockBuf[index], 1))
       {
         if (m_verbose)
         {
-          printf("%02X ", m_recvPacketBuf[index]);
+          printf("%02X ", m_recvBlockBuf[index]);
         }
 
-        // every byte except the last in the packet is ack'd
-        if (index < m_recvPacketBuf[0])
+        // every byte except the last in the block is ack'd
+        if (index < m_recvBlockBuf[0])
         {
           std::this_thread::sleep_for(std::chrono::milliseconds(2));
-          ack = ~(m_recvPacketBuf[index]);
+          ack = ~(m_recvBlockBuf[index]);
           status = writeSerial(&ack, 1) && readSerial(&loopback, 1);
         }
         index++;
@@ -237,7 +237,7 @@ bool Kwp71::recvPacket()
       {
         if (m_verbose)
         {
-          fprintf(stderr, "Timed out while receiving packet data!\n");
+          fprintf(stderr, "Timed out while receiving block data!\n");
         }
         status = false;
       }
@@ -250,22 +250,22 @@ bool Kwp71::recvPacket()
 
   if (status)
   {
-    processReceivedPacket();
+    processReceivedBlock();
   }
 
   return status;
 }
 
 /**
- * Populates a local buffer with the contents of a packet to be transmitted.
+ * Populates a local buffer with the contents of a block to be transmitted.
  */
-bool Kwp71::populatePacket(bool& usedPendingCommand)
+bool Kwp71::populateBlock(bool& usedPendingCommand)
 {
   bool status = false;
-  Kwp71PacketType type;
+  Kwp71BlockType type;
   std::vector<uint8_t> payload;
 
-  const bool ecuReadyForCmd = (m_lastReceivedPacketType == Kwp71PacketType::Empty);
+  const bool ecuReadyForCmd = (m_lastReceivedBlockType == Kwp71BlockType::Empty);
 
   if (ecuReadyForCmd && m_commandIsPending)
   {
@@ -275,58 +275,58 @@ bool Kwp71::populatePacket(bool& usedPendingCommand)
   }
   else
   {
-    type = Kwp71PacketType::Empty;
+    type = Kwp71BlockType::Empty;
     payload = {};
     usedPendingCommand = false;
   }
 
   switch (type)
   {
-  /** TODO: implement missing packet types:
+  /** TODO: implement missing block types:
    *  ActivateActuators
    *  EraseTroubleCodes
    *  ReadDACChannel
    *  ReadParamData
    *  RecordParamData
    */
-  case Kwp71PacketType::Empty:
-  case Kwp71PacketType::ReadTroubleCodes:
-  case Kwp71PacketType::RequestID:
-  case Kwp71PacketType::RequestSnapshot:
-  case Kwp71PacketType::Disconnect:
+  case Kwp71BlockType::Empty:
+  case Kwp71BlockType::ReadTroubleCodes:
+  case Kwp71BlockType::RequestID:
+  case Kwp71BlockType::RequestSnapshot:
+  case Kwp71BlockType::Disconnect:
     status = true;
-    m_sendPacketBuf[0] = 0x03;
+    m_sendBlockBuf[0] = 0x03;
     break;
-  case Kwp71PacketType::ReadParamData:
+  case Kwp71BlockType::ReadParamData:
     status = true;
-    m_sendPacketBuf[0] = payload.size() + 0x03;
-    memcpy(&m_sendPacketBuf[3], &payload[0], payload.size());
+    m_sendBlockBuf[0] = payload.size() + 0x03;
+    memcpy(&m_sendBlockBuf[3], &payload[0], payload.size());
     break;
-  case Kwp71PacketType::ReadDACChannel:
+  case Kwp71BlockType::ReadDACChannel:
     if (payload.size() == 1)
     {
       status = true;
-      m_sendPacketBuf[0] = 0x04;
-      m_sendPacketBuf[3] = payload[0];
+      m_sendBlockBuf[0] = 0x04;
+      m_sendBlockBuf[3] = payload[0];
     }
     break;
-  case Kwp71PacketType::ReadRAM:
-  case Kwp71PacketType::ReadROM:
-  case Kwp71PacketType::ReadEEPROM:
+  case Kwp71BlockType::ReadRAM:
+  case Kwp71BlockType::ReadROM:
+  case Kwp71BlockType::ReadEEPROM:
     if (payload.size() == 3)
     {
       status = true;
-      m_sendPacketBuf[0] = 0x06;
-      memcpy(&m_sendPacketBuf[3], &payload[0], payload.size());
+      m_sendBlockBuf[0] = 0x06;
+      memcpy(&m_sendBlockBuf[3], &payload[0], payload.size());
     }
     break;
-  case Kwp71PacketType::WriteRAM:
-  case Kwp71PacketType::WriteEEPROM:
+  case Kwp71BlockType::WriteRAM:
+  case Kwp71BlockType::WriteEEPROM:
     if (payload.size() == (payload[0] + 3))
     {
       status = true;
-      m_sendPacketBuf[0] = payload.size() + 3;
-      memcpy(&m_sendPacketBuf[3], &payload[0], payload.size());
+      m_sendBlockBuf[0] = payload.size() + 3;
+      memcpy(&m_sendBlockBuf[3], &payload[0], payload.size());
     }
   default:
     break;
@@ -334,9 +334,9 @@ bool Kwp71::populatePacket(bool& usedPendingCommand)
 
   if (status)
   {
-    m_sendPacketBuf[1] = ++m_lastUsedSeqNum;
-    m_sendPacketBuf[2] = (uint8_t)type;
-    m_sendPacketBuf[m_sendPacketBuf[0]] = s_endOfPacket;
+    m_sendBlockBuf[1] = ++m_lastUsedSeqNum;
+    m_sendBlockBuf[2] = (uint8_t)type;
+    m_sendBlockBuf[m_sendBlockBuf[0]] = s_endOfBlock;
   }
 
   return status;
@@ -552,7 +552,7 @@ bool Kwp71::requestIDInfo(std::vector<std::string>& idResponse)
   // wait until any previous command has been fully processed
   std::unique_lock<std::mutex> lock(m_commandMutex);
 
-  m_pendingCmd.type = Kwp71PacketType::RequestID;
+  m_pendingCmd.type = Kwp71BlockType::RequestID;
   m_pendingCmd.payload = std::vector<uint8_t>();
   m_commandIsPending = true;
 
@@ -571,23 +571,23 @@ bool Kwp71::requestIDInfo(std::vector<std::string>& idResponse)
   return m_responseReadSuccess;
 }
 
-bool Kwp71::isValidCommandFromTester(Kwp71PacketType type) const
+bool Kwp71::isValidCommandFromTester(Kwp71BlockType type) const
 {
   switch (type)
   {
-  case Kwp71PacketType::RequestID:
-  case Kwp71PacketType::ReadRAM:
-  case Kwp71PacketType::WriteRAM:
-  case Kwp71PacketType::ReadROM:
-  case Kwp71PacketType::ActivateActuators:
-  case Kwp71PacketType::EraseTroubleCodes:
-  case Kwp71PacketType::ReadTroubleCodes:
-  case Kwp71PacketType::ReadDACChannel:
-  case Kwp71PacketType::ReadParamData:
-  case Kwp71PacketType::RecordParamData:
-  case Kwp71PacketType::RequestSnapshot:
-  case Kwp71PacketType::ReadEEPROM:
-  case Kwp71PacketType::WriteEEPROM:
+  case Kwp71BlockType::RequestID:
+  case Kwp71BlockType::ReadRAM:
+  case Kwp71BlockType::WriteRAM:
+  case Kwp71BlockType::ReadROM:
+  case Kwp71BlockType::ActivateActuators:
+  case Kwp71BlockType::EraseTroubleCodes:
+  case Kwp71BlockType::ReadTroubleCodes:
+  case Kwp71BlockType::ReadDACChannel:
+  case Kwp71BlockType::ReadParamData:
+  case Kwp71BlockType::RecordParamData:
+  case Kwp71BlockType::RequestSnapshot:
+  case Kwp71BlockType::ReadEEPROM:
+  case Kwp71BlockType::WriteEEPROM:
     return true;
   default:
     return false;
@@ -633,7 +633,7 @@ bool Kwp71::readRAM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data)
   if (numBytes <= (UINT8_MAX - 3))
   {
     Kwp71Command cmd;
-    cmd.type = Kwp71PacketType::ReadRAM;
+    cmd.type = Kwp71BlockType::ReadRAM;
     cmd.payload = std::vector<uint8_t>({
       numBytes,
       static_cast<uint8_t>(addr >> 8),
@@ -651,7 +651,7 @@ bool Kwp71::readROM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data)
   if (numBytes <= (UINT8_MAX - 3))
   {
     Kwp71Command cmd;
-    cmd.type = Kwp71PacketType::ReadROM;
+    cmd.type = Kwp71BlockType::ReadROM;
     cmd.payload = std::vector<uint8_t>({
       numBytes,
       static_cast<uint8_t>(addr >> 8),
@@ -669,7 +669,7 @@ bool Kwp71::readEEPROM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& da
   if (numBytes <= (UINT8_MAX - 3))
   {
     Kwp71Command cmd;
-    cmd.type = Kwp71PacketType::ReadEEPROM;
+    cmd.type = Kwp71BlockType::ReadEEPROM;
     cmd.payload = std::vector<uint8_t>({
       numBytes,
       static_cast<uint8_t>(addr >> 8),
@@ -685,11 +685,11 @@ bool Kwp71::writeRAM(uint16_t addr, const std::vector<uint8_t>& data)
   bool status = false;
 
   // Limit the maximum write payload to the size of the remaining
-  // space in a single packet (after accounting for the header/trailer).
+  // space in a single block (after accounting for the header/trailer).
   if (data.size() <= (UINT8_MAX - 6)) // 249 bytes max
   {
     Kwp71Command cmd;
-    cmd.type = Kwp71PacketType::WriteRAM;
+    cmd.type = Kwp71BlockType::WriteRAM;
     cmd.payload = std::vector<uint8_t>(
     {
       static_cast<uint8_t>(data.size()),
@@ -710,11 +710,11 @@ bool Kwp71::writeEEPROM(uint16_t addr, const std::vector<uint8_t>& data)
   bool status = false;
 
   // Limit the maximum write payload to the size of the remaining
-  // space in a single packet (after accounting for the header/trailer).
+  // space in a single block (after accounting for the header/trailer).
   if (data.size() <= (UINT8_MAX - 6)) // 249 bytes max
   {
     Kwp71Command cmd;
-    cmd.type = Kwp71PacketType::WriteRAM;
+    cmd.type = Kwp71BlockType::WriteRAM;
     cmd.payload = std::vector<uint8_t>(
     {
       static_cast<uint8_t>(data.size()),
@@ -731,36 +731,36 @@ bool Kwp71::writeEEPROM(uint16_t addr, const std::vector<uint8_t>& data)
 }
 
 /**
- * Parses the data in the received packet buffer and takes the appropriate
+ * Parses the data in the received block buffer and takes the appropriate
  * action to package and return the data.
  */
-void Kwp71::processReceivedPacket()
+void Kwp71::processReceivedBlock()
 {
-  m_lastReceivedPacketType = (Kwp71PacketType)(m_recvPacketBuf[2]);
-  m_lastUsedSeqNum = m_recvPacketBuf[1];
-  const uint8_t payloadLen = m_recvPacketBuf[0] - 3;
+  m_lastReceivedBlockType = (Kwp71BlockType)(m_recvBlockBuf[2]);
+  m_lastUsedSeqNum = m_recvBlockBuf[1];
+  const uint8_t payloadLen = m_recvBlockBuf[0] - 3;
 
-  switch (m_lastReceivedPacketType)
+  switch (m_lastReceivedBlockType)
   {
-  // TODO: what action is required for these two packet types?
-  case Kwp71PacketType::ParamRecordConf:
-  case Kwp71PacketType::Snapshot:
+  // TODO: what action is required for these two block types?
+  case Kwp71BlockType::ParamRecordConf:
+  case Kwp71BlockType::Snapshot:
     break;
-  case Kwp71PacketType::ASCIIString:
-    m_responseStringData.push_back(std::string(m_recvPacketBuf[3], payloadLen));
+  case Kwp71BlockType::ASCIIString:
+    m_responseStringData.push_back(std::string(m_recvBlockBuf[3], payloadLen));
     break;
-  case Kwp71PacketType::DACValue:
-  case Kwp71PacketType::BinaryData:
-  case Kwp71PacketType::RAMContent:
-  case Kwp71PacketType::ROMContent:
-  case Kwp71PacketType::EEPROMContent:
-  case Kwp71PacketType::ParametricData:
-    // capture just the payload data of the packet (i.e. the bytes
-    // *after* the length, seq. num, and packet type, and *before*
-    // the 0x03 end-of-packet marker
+  case Kwp71BlockType::DACValue:
+  case Kwp71BlockType::BinaryData:
+  case Kwp71BlockType::RAMContent:
+  case Kwp71BlockType::ROMContent:
+  case Kwp71BlockType::EEPROMContent:
+  case Kwp71BlockType::ParametricData:
+    // capture just the payload data of the block (i.e. the bytes
+    // *after* the length, seq. num, and block type, and *before*
+    // the 0x03 end-of-block marker
     m_responseBinaryData.insert(m_responseBinaryData.end(),
-                                &m_recvPacketBuf[3],
-                                &m_recvPacketBuf[3 + payloadLen]);
+                                &m_recvBlockBuf[3],
+                                &m_recvBlockBuf[3 + payloadLen]);
     break;
   }
 }
@@ -796,30 +796,30 @@ void Kwp71::commLoop()
 
     // The ECU apparently sends its ID info unsolicited next
     do {
-      if (recvPacket())
+      if (recvBlock())
       {
-        // ACK until the ECU sends its first empty packet (after the ID info)
-        if (m_lastReceivedPacketType != Kwp71PacketType::Empty)
+        // ACK until the ECU sends its first empty block (after the ID info)
+        if (m_lastReceivedBlockType != Kwp71BlockType::Empty)
         {
-          sendPacket();
+          sendBlock();
         }
       }
       else
       {
         m_connectionActive = false;
       }
-    } while ((m_lastReceivedPacketType != Kwp71PacketType::Empty) && !m_shutdown);
+    } while ((m_lastReceivedBlockType != Kwp71BlockType::Empty) && !m_shutdown);
 
-    // continue taking turns with the ECU, sending one packet per turn
+    // continue taking turns with the ECU, sending one block per turn
     while (m_connectionActive && !m_shutdown)
     {
-      sendPacket();
+      sendBlock();
 
-      if (recvPacket())
+      if (recvBlock())
       {
-        // if the last packet received from the ECU was an empty/ack,
+        // if the last block received from the ECU was an empty/ack,
         // then we can send a command of our own (if we have one available)
-        if (m_lastReceivedPacketType == Kwp71PacketType::Empty)
+        if (m_lastReceivedBlockType == Kwp71BlockType::Empty)
         {
           if (m_waitingForReply)
           {
@@ -828,7 +828,7 @@ void Kwp71::commLoop()
             m_responseCondVar.notify_one();
           }
         }
-        else if (m_lastReceivedPacketType == Kwp71PacketType::NACK)
+        else if (m_lastReceivedBlockType == Kwp71BlockType::NACK)
         {
           if (m_waitingForReply)
           {
@@ -853,6 +853,13 @@ void Kwp71::commLoop()
         m_connectionActive = false;
       }
     }
+
+    // Since we believe that the connection has failed, delay for slightly
+    // longer than the maximum time allowed by the spec between responses.
+    // This will ensure that the ECU also sees the connection as having
+    // been terminated. A re-connection (with slow init) will not work unless
+    // we're on the same page as the ECU.
+    std::this_thread::sleep_for(std::chrono::milliseconds(255));
   }
 }
 
