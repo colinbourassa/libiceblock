@@ -16,6 +16,19 @@ int main(int argc, char** argv)
     ver.major, ver.minor, ver.patch);
 
   Kwp71 kwp;
+  std::vector<FtdiDeviceInfo> devices = kwp.enumerateFtdiDevices();
+  printf("Found %d device(s).\n", devices.size());
+
+  for (int i = 0; i < devices.size(); i++)
+  {
+    printf("%03d:%03d - %s %s\n",
+      devices[i].busNumber,
+      devices[i].deviceAddress,
+      devices[i].manufacturer.c_str(),
+      devices[i].description.c_str());
+  }
+
+  /*
   int err = 0;
   printf("Attempting connection via FTDI %04x/%04x to ECU addr %02x with baud %d...\n",
     FTDI_VID, FTDI_PID, ECU_ADDR, ECU_BAUD);
@@ -52,6 +65,7 @@ int main(int argc, char** argv)
     printf("connect() failed.\n");
     status = -1;
   }
+  */
 
   return status;
 }

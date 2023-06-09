@@ -4,10 +4,31 @@
 #include <vector>
 #include <chrono>
 #include <memory>
+#include <set>
 #include <condition_variable>
 #include <stdint.h>
 #include <libftdi1/ftdi.h>
 #include "kwp71_version.h"
+
+struct FtdiDeviceInfo
+{
+  uint8_t busNumber;
+  uint8_t deviceAddress;
+  std::string manufacturer;
+  std::string description;
+  std::string serial;
+  FtdiDeviceInfo(
+    uint8_t _busNumber,
+    uint8_t _deviceAddress,
+    const std::string& _manufacturer,
+    const std::string& _description,
+    const std::string& _serial) :
+    busNumber(_busNumber),
+    deviceAddress(_deviceAddress),
+    manufacturer(_manufacturer),
+    description(_description),
+    serial(_serial) {}
+};
 
 enum class Kwp71BlockType
 {
@@ -65,6 +86,7 @@ public:
   bool writeRAM(uint16_t addr, const std::vector<uint8_t>& data);
   bool writeEEPROM(uint16_t addr, const std::vector<uint8_t>& data);
   static Kwp71Version getLibraryVersion();
+  std::vector<FtdiDeviceInfo> enumerateFtdiDevices(const std::set<std::pair<uint16_t,uint16_t>>& extrtaPids = {});
 
 private:
   bool m_verbose;
@@ -111,5 +133,7 @@ private:
 
   bool readSerial(uint8_t* buf, int count);
   bool writeSerial(uint8_t* buf, int count);
+
+  int getFtdiDeviceInfo(ftdi_device_list* list, int count, std::vector<FtdiDeviceInfo>& deviceInfo);
 };
 
