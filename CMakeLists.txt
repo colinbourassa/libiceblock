@@ -5,7 +5,7 @@ include (GNUInstallDirs)
 set(PROJECT_NAME "libkwp71")
 set(PROJECT_DESCRIPTION "Library supporting serial communication with ECUs that speak the KP-71 / KWP-71 protocol")
 set(PROJECT_AUTHOR "Colin Bourassa <colin.bourassa@gmail.com>")
-set(PROJECT_URL "https://github.com/colinbourassa/liblibkwp71")
+set(PROJECT_URL "https://github.com/colinbourassa/libkwp71")
 
 set (KWP71_VER_MAJOR 1)
 set (KWP71_VER_MINOR 0)
