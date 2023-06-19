@@ -71,18 +71,21 @@ bool Kwp71::connect(uint16_t vid, uint16_t pid, uint8_t addr, int baud, int& err
             {
               // readAckKeywordBytes() failed
               err = -1;
+              ftdi_usb_close(&m_ftdi);
             }
           }
           else
           {
             // setFtdiSerialProperties() failed
             err = -2;
+            ftdi_usb_close(&m_ftdi);
           }
         }
         else
         {
           // slowInit() failed
           err = -3;
+          ftdi_usb_close(&m_ftdi);
         }
       }
       else
@@ -286,7 +289,7 @@ bool Kwp71::populateBlock(bool& usedPendingCommand)
   /** TODO: implement missing block types:
    *  ActivateActuators
    *  EraseTroubleCodes
-   *  ReadDACChannel
+   *  ReadADCChannel
    *  ReadParamData
    *  RecordParamData
    */
@@ -303,7 +306,7 @@ bool Kwp71::populateBlock(bool& usedPendingCommand)
     m_sendBlockBuf[0] = payload.size() + 0x03;
     memcpy(&m_sendBlockBuf[3], &payload[0], payload.size());
     break;
-  case Kwp71BlockType::ReadDACChannel:
+  case Kwp71BlockType::ReadADCChannel:
     if (payload.size() == 1)
     {
       status = true;
@@ -583,7 +586,7 @@ bool Kwp71::isValidCommandFromTester(Kwp71BlockType type) const
   case Kwp71BlockType::ActivateActuators:
   case Kwp71BlockType::EraseTroubleCodes:
   case Kwp71BlockType::ReadTroubleCodes:
-  case Kwp71BlockType::ReadDACChannel:
+  case Kwp71BlockType::ReadADCChannel:
   case Kwp71BlockType::ReadParamData:
   case Kwp71BlockType::RecordParamData:
   case Kwp71BlockType::RequestSnapshot:
@@ -750,7 +753,7 @@ void Kwp71::processReceivedBlock()
   case Kwp71BlockType::ASCIIString:
     m_responseStringData.push_back(std::string(m_recvBlockBuf[3], payloadLen));
     break;
-  case Kwp71BlockType::DACValue:
+  case Kwp71BlockType::ADCValue:
   case Kwp71BlockType::BinaryData:
   case Kwp71BlockType::RAMContent:
   case Kwp71BlockType::ROMContent:
