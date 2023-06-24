@@ -43,6 +43,7 @@ enum class Kwp71BlockType
   ReadADCChannel    = 0x08,
   Empty             = 0x09,
   NACK              = 0x0A,
+  NotSupported      = 0x0B,
   ReadParamData     = 0x10,
   RecordParamData   = 0x11,
   RequestSnapshot   = 0x12,

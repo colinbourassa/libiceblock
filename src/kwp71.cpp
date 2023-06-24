@@ -251,6 +251,10 @@ bool Kwp71::recvBlock()
       printf("\n");
     }
   }
+  else
+  {
+    status = false;
+  }
 
   if (status)
   {
@@ -832,7 +836,8 @@ void Kwp71::commLoop()
             m_responseCondVar.notify_one();
           }
         }
-        else if (m_lastReceivedBlockType == Kwp71BlockType::NACK)
+        else if ((m_lastReceivedBlockType == Kwp71BlockType::NACK) ||
+                 (m_lastReceivedBlockType == Kwp71BlockType::NotSupported))
         {
           if (m_waitingForReply)
           {
