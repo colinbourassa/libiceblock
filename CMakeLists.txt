@@ -44,16 +44,16 @@ option (ENABLE_PKGCONFIG_INSTALL "Enables installation of a pkgconfig configurat
 
 find_package (LibFTDI1 CONFIG REQUIRED)
 find_package (PkgConfig)
-pkg_check_modules(LIBUSB libusb-1.0 IMPORTED_TARGET)
+pkg_check_modules(LIBRARY_USB libusb-1.0 IMPORTED_TARGET)
 
-if (NOT LIBUSB_FOUND)
+if (NOT LIBRARY_USB_FOUND)
   message(FATAL_ERROR "LibUSB 1.0 required to build.")
 endif()
 
 configure_file ("${SOURCE_SUBDIR}/kwp71_version.h.in"
                 "${CMAKE_BINARY_DIR}/kwp71_version.h")
 
-include_directories ("${CMAKE_SOURCE_DIR}/src" "${CMAKE_BINARY_DIR}" "${LIBUSB_INCLUDE_DIRS}")
+include_directories ("${CMAKE_SOURCE_DIR}/src" "${CMAKE_BINARY_DIR}" "${LIBRARY_USB_INCLUDE_DIRS}")
 
 if (BUILD_STATIC STREQUAL "ON")
   add_library (kwp71 STATIC ${SOURCE_SUBDIR}/kwp71.cpp)
@@ -61,7 +61,7 @@ else()
   add_library (kwp71 SHARED ${SOURCE_SUBDIR}/kwp71.cpp)
 endif()
 
-target_link_libraries (kwp71 usb ftdi1)
+target_link_libraries (kwp71 usb-1.0 ftdi1)
 
 add_executable (kwp71read ${SOURCE_SUBDIR}/kwp71read.cpp)
 
