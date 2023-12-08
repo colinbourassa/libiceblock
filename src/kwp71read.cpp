@@ -5,7 +5,6 @@
 #define FTDI_VID 0x0403
 #define FTDI_PID 0xfa20
 #define ECU_ADDR 0x10
-#define ECU_BAUD 4800
 
 int main(int argc, char** argv)
 {
@@ -15,7 +14,7 @@ int main(int argc, char** argv)
   printf("kwp71read using libkwp71 v%d.%d.%d\n",
     ver.major, ver.minor, ver.patch);
 
-  Kwp71 kwp;
+  Kwp71 kwp(true);
   std::vector<FtdiDeviceInfo> devices = kwp.enumerateFtdiDevices();
   printf("Found %d device(s).\n", devices.size());
 
@@ -28,12 +27,15 @@ int main(int argc, char** argv)
       devices[i].description.c_str());
   }
 
-  /*
   int err = 0;
-  printf("Attempting connection via FTDI %04x/%04x to ECU addr %02x with baud %d...\n",
-    FTDI_VID, FTDI_PID, ECU_ADDR, ECU_BAUD);
+  printf("Attempting connection via FTDI %04x/%04x to ECU addr %02x...\n",
+    FTDI_VID, FTDI_PID, ECU_ADDR);
 
-  if (kwp.connect(FTDI_VID, FTDI_PID, ECU_ADDR, ECU_BAUD, err))
+  // This is appropriate for Bosch Motronic 1.2 p/n 0 261 200 156 (E32 BMW 750iL)
+  kwp.setProtocolVariant(Kwp71Variant::Standard);
+  kwp.setBaud(4800);
+
+  if (kwp.connect(FTDI_VID, FTDI_PID, ECU_ADDR, err))
   {
     printf("Connected successfully.\n");
     std::vector<uint8_t> data;
@@ -54,7 +56,7 @@ int main(int argc, char** argv)
     }
     else
     {
-      printf("readRAM() failed.\n");
+      printf("readROM() failed.\n");
       status = -2;
     }
 
@@ -65,7 +67,6 @@ int main(int argc, char** argv)
     printf("connect() failed.\n");
     status = -1;
   }
-  */
 
   return status;
 }

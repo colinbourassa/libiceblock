@@ -60,6 +60,12 @@ enum class Kwp71BlockType
   ROMContent        = 0xFE,
 };
 
+enum class Kwp71Variant
+{
+  Standard,
+  FIAT9141
+};
+
 struct Kwp71Command
 {
   Kwp71BlockType type;
@@ -77,7 +83,23 @@ class Kwp71
 {
 public:
   Kwp71(bool verbose = false);
-  bool connect(uint16_t vid, uint16_t pid, uint8_t addr, int baud, int& err);
+  void setProtocolVariant(Kwp71Variant variant);
+  inline void setBaud(int baud)
+    { m_baudRate = baud; }
+  inline void setSlowInitDataBits(int dataBits)
+    { m_initDataBits = dataBits; }
+  inline void setSlowInitParity(int parity)
+    { m_initParity = parity; }
+  inline void setTimeBeforeReconnectionMilliseconds(int timeMs)
+    { m_timeBeforeReconnectionMs = timeMs; }
+  inline void setEchoDuringBlockReceipt(bool echo)
+    { m_bytesEchoedDuringBlockReceipt = echo; }
+  inline void setUseChecksumAsTrailer(bool useChecksum)
+    { m_lastBlockByteIsChecksum = useChecksum; }
+  inline void setUseSequenceNumbers(bool useSequenceNums)
+    { m_useSequenceNums = useSequenceNums; }
+
+  bool connect(uint16_t vid, uint16_t pid, uint8_t addr, int& err);
   void disconnect();
   bool requestIDInfo(std::vector<std::string>& idResponse);
   bool sendCommand(Kwp71Command cmd, std::vector<uint8_t>& response);
@@ -91,24 +113,36 @@ public:
 
 private:
   bool m_verbose;
-  bool m_connectionActive;
-  uint8_t m_ecuAddr;
-  int m_baudRate;
-  int m_initDataBits;
-  int m_initParity;
-  bool m_shutdown;
-  std::unique_ptr<std::thread> m_ifThreadPtr;
+  bool m_connectionActive = false;
+  bool m_shutdown = false;
+  uint8_t m_ecuAddr = 0x10;
+
+  /////
+  // Protocol variant parameters
+  bool m_bytesEchoedDuringBlockReceipt = true;
+  int m_baudRate = 9600;
+  int m_initDataBits = 8;
+  int m_initParity = 0;
+  int m_timeBeforeReconnectionMs = 260;
+  bool m_lastBlockByteIsChecksum = false;
+  bool m_useSequenceNums = true;
+  int m_isoKeywordIndexToEcho = 2;
+  bool m_isoKeywordEchoIsInverted = true;
+  int m_isoKeywordNumBytes = 3;
+  /////
+
+  std::unique_ptr<std::thread> m_ifThreadPtr = nullptr;
   std::string m_deviceName;
-  uint8_t m_lastUsedSeqNum;
+  uint8_t m_lastUsedSeqNum = 0;
   uint8_t m_sendBlockBuf[256];
   uint8_t m_recvBlockBuf[256];
-  Kwp71BlockType m_lastReceivedBlockType;
+  Kwp71BlockType m_lastReceivedBlockType = Kwp71BlockType::Empty;
   std::vector<uint8_t> m_responseBinaryData;
   std::vector<std::string> m_responseStringData;
   Kwp71Command m_pendingCmd;
-  bool m_commandIsPending;
-  bool m_waitingForReply;
-  bool m_responseReadSuccess;
+  bool m_commandIsPending = false;
+  bool m_waitingForReply = false;
+  bool m_responseReadSuccess = false;
   std::condition_variable m_responseCondVar;
   std::mutex m_responseMutex;
   std::mutex m_connectMutex;
@@ -117,8 +151,8 @@ private:
 
   static constexpr uint8_t s_endOfBlock = 0x03;
 
-  bool waitForByteSequence(const std::vector<uint8_t>& sequence,
-                           std::chrono::milliseconds timeout);
+  bool waitForISOSequence(std::chrono::milliseconds timeout,
+                          std::vector<uint8_t>& isoBytes);
   bool isConnectionActive() const;
   bool populateBlock(bool& usedPendingCommand);
   bool readAckKeywordBytes();

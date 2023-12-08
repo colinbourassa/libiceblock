@@ -16,47 +16,66 @@ Kwp71Version Kwp71::getLibraryVersion()
   return ver;
 }
 
-Kwp71::Kwp71(bool verbose) :
-  m_verbose(verbose),
-  m_connectionActive(false),
-  m_ecuAddr(0),
-  m_baudRate(4800),
-  m_initDataBits(8),
-  m_initParity(0),
-  m_shutdown(false),
-  m_ifThreadPtr(nullptr),
-  m_lastUsedSeqNum(0),
-  m_lastReceivedBlockType(Kwp71BlockType::Empty),
-  m_commandIsPending(false),
-  m_waitingForReply(false),
-  m_responseReadSuccess(false)
+Kwp71::Kwp71(bool verbose) : m_verbose(verbose)
 {
   ftdi_init(&m_ftdi);
 }
 
+void Kwp71::setProtocolVariant(Kwp71Variant variant)
+{
+  if (variant == Kwp71Variant::Standard)
+  {
+    m_baudRate = 9600;
+    m_initDataBits = 8;
+    m_initParity = 0;
+    m_timeBeforeReconnectionMs = 260;
+    m_bytesEchoedDuringBlockReceipt = true;
+    m_lastBlockByteIsChecksum = false;
+    m_useSequenceNums = true;
+    m_isoKeywordIndexToEcho = 2;
+    m_isoKeywordEchoIsInverted = true;
+    m_isoKeywordNumBytes = 3;
+  }
+  else if (variant == Kwp71Variant::FIAT9141)
+  {
+    m_baudRate = 4800;
+    m_initDataBits = 7;
+    m_initParity = 1;
+    m_timeBeforeReconnectionMs = 2050;
+    m_bytesEchoedDuringBlockReceipt = false;
+    m_lastBlockByteIsChecksum = true;
+    m_useSequenceNums = false;
+    m_isoKeywordIndexToEcho = 2;
+    m_isoKeywordEchoIsInverted = true;
+    m_isoKeywordNumBytes = 6;
+  }
+}
+
 /**
- * Performs the slow init sequence using the provided ECU address and then
- * opens the serial port device, using it to read the ECU's keyword bytes.
+ * Attempts a connection using provided protocol parameters, which may be
+ * different than those used by official/standard implementations of the
+ * KWP71 protocol. Performs the slow init sequence using the provided ECU
+ * address and then opens the serial port device, using it to read the ECU's
+ * keyword bytes.
  * Returns true if all of this is successful; false otherwise.
  */
-bool Kwp71::connect(uint16_t vid, uint16_t pid, uint8_t addr, int baud, int& err)
+bool Kwp71::connect(uint16_t vid, uint16_t pid, uint8_t addr, int& err)
 {
   bool status = false;
   std::unique_lock<std::mutex> lock(m_connectMutex);
 
   m_ecuAddr = addr;
   m_connectionActive = false;
-  m_baudRate = baud;
-
   m_shutdown = false;
+
   if (m_ifThreadPtr == nullptr)
   {
     if (ftdi_set_interface(&m_ftdi, INTERFACE_A) == 0)
     {
       if ((ftdi_usb_open(&m_ftdi, vid, pid) == 0))
       {
-        // TODO: parameterize the data bits and parity
-        if (slowInit(m_ecuAddr, 8, 0))
+        ftdi_tcioflush(&m_ftdi);
+        if (slowInit(m_ecuAddr, m_initDataBits, m_initParity))
         {
           if (setFtdiSerialProperties())
           {
@@ -127,10 +146,11 @@ bool Kwp71::isConnectionActive() const
 }
 
 /**
- * Sends a KWP-71 block by transmitting it one byte at a time and waiting
- * for positive acknowledgement of each byte by the receiving ECU.
- * Returns true if every byte (except the last) is met with a bitwise
- * inversion of that byte in response from the ECU; false otherwise.
+ * Sends a KWP-71 block by transmitting it one byte at a time. For certain
+ * variants of the protocol, the transmitting side must wait for the inverse of
+ * each byte echoed by the receiver before transmitting the next byte (with the
+ * exception of the last byte, which is not echoed.)
+ * Returns true if the entire block was sent successfuly; false otherwise.
  */
 bool Kwp71::sendBlock()
 {
@@ -151,16 +171,17 @@ bool Kwp71::sendBlock()
   while (status && (index <= m_sendBlockBuf[0]))
   {
     // Transmit the block one byte at a time, reading back the same byte as
-    // it appears in the Rx buffer (due to the loopback) and then reading the
-    // acknowledgement byte from the ECU (for every byte except the last).
-    // Verify that the ack byte is the bitwise inversion of the sent byte.
+    // it appears in the Rx buffer (due to the loopback).
     if (writeSerial(&m_sendBlockBuf[index], 1) && readSerial(&loopback, 1))
     {
       if (m_verbose)
       {
         printf("%02X ", m_sendBlockBuf[index]);
       }
-      if ((index < m_sendBlockBuf[0]))
+
+      // If the current protocol variant calls for it, read the bitwise
+      // inversion of the last sent byte as it is echoed by the receiver.
+      if (m_bytesEchoedDuringBlockReceipt && (index < m_sendBlockBuf[0]))
       {
         ackCompare = ~(m_sendBlockBuf[index]);
         status = readSerial(&ack, 1) && (ack == ackCompare);
@@ -192,9 +213,9 @@ bool Kwp71::sendBlock()
 
 /**
  * Reads a block from the serial port, the length of which is determined by
- * the first byte. Each byte (except the last) is positively acknowledged with
- * its bitwise inversion. Returns true if all the expected bytes are received,
- * false otherwise.
+ * the first byte. In certain variants of the protocol, each byte (except the
+ * last) is positively acknowledged with its bitwise inversion. Returns true if
+ * all the expected bytes are received, false otherwise.
  */
 bool Kwp71::recvBlock()
 {
@@ -214,10 +235,14 @@ bool Kwp71::recvBlock()
     {
       printf("%02X ", m_recvBlockBuf[0]);
     }
-    // ack the pkt length byte
-    std::this_thread::sleep_for(std::chrono::milliseconds(2));
-    ack = ~(m_recvBlockBuf[0]);
-    status = writeSerial(&ack, 1) && readSerial(&loopback, 1);
+
+    if (m_bytesEchoedDuringBlockReceipt)
+    {
+      // ack the pkt length byte
+      std::this_thread::sleep_for(std::chrono::milliseconds(2));
+      ack = ~(m_recvBlockBuf[0]);
+      status = writeSerial(&ack, 1) && readSerial(&loopback, 1);
+    }
 
     while (status && (index <= m_recvBlockBuf[0]))
     {
@@ -229,7 +254,7 @@ bool Kwp71::recvBlock()
         }
 
         // every byte except the last in the block is ack'd
-        if (index < m_recvBlockBuf[0])
+        if (m_bytesEchoedDuringBlockReceipt && (index < m_recvBlockBuf[0]))
         {
           std::this_thread::sleep_for(std::chrono::milliseconds(2));
           ack = ~(m_recvBlockBuf[index]);
@@ -246,6 +271,7 @@ bool Kwp71::recvBlock()
         status = false;
       }
     }
+
     if (m_verbose)
     {
       printf("\n");
@@ -288,6 +314,9 @@ bool Kwp71::populateBlock(bool& usedPendingCommand)
     usedPendingCommand = false;
   }
 
+  const uint8_t sizeOfEmptyBlock = m_useSequenceNums ? 3 : 2;
+  const uint8_t payloadStartPos = m_useSequenceNums ? 3 : 2;
+
   switch (type)
   {
   /** TODO: implement missing block types:
@@ -303,19 +332,19 @@ bool Kwp71::populateBlock(bool& usedPendingCommand)
   case Kwp71BlockType::RequestSnapshot:
   case Kwp71BlockType::Disconnect:
     status = true;
-    m_sendBlockBuf[0] = 0x03;
+    m_sendBlockBuf[0] = sizeOfEmptyBlock;
     break;
   case Kwp71BlockType::ReadParamData:
     status = true;
-    m_sendBlockBuf[0] = payload.size() + 0x03;
-    memcpy(&m_sendBlockBuf[3], &payload[0], payload.size());
+    m_sendBlockBuf[0] = sizeOfEmptyBlock + payload.size();
+    memcpy(&m_sendBlockBuf[payloadStartPos], &payload[0], payload.size());
     break;
   case Kwp71BlockType::ReadADCChannel:
     if (payload.size() == 1)
     {
       status = true;
-      m_sendBlockBuf[0] = 0x04;
-      m_sendBlockBuf[3] = payload[0];
+      m_sendBlockBuf[0] = sizeOfEmptyBlock + 1;
+      m_sendBlockBuf[payloadStartPos] = payload[0];
     }
     break;
   case Kwp71BlockType::ReadRAM:
@@ -324,8 +353,8 @@ bool Kwp71::populateBlock(bool& usedPendingCommand)
     if (payload.size() == 3)
     {
       status = true;
-      m_sendBlockBuf[0] = 0x06;
-      memcpy(&m_sendBlockBuf[3], &payload[0], payload.size());
+      m_sendBlockBuf[0] = sizeOfEmptyBlock + 3;
+      memcpy(&m_sendBlockBuf[payloadStartPos], &payload[0], payload.size());
     }
     break;
   case Kwp71BlockType::WriteRAM:
@@ -333,8 +362,8 @@ bool Kwp71::populateBlock(bool& usedPendingCommand)
     if (payload.size() == (payload[0] + 3))
     {
       status = true;
-      m_sendBlockBuf[0] = payload.size() + 3;
-      memcpy(&m_sendBlockBuf[3], &payload[0], payload.size());
+      m_sendBlockBuf[0] = sizeOfEmptyBlock + payload.size();
+      memcpy(&m_sendBlockBuf[payloadStartPos], &payload[0], payload.size());
     }
   default:
     break;
@@ -342,9 +371,29 @@ bool Kwp71::populateBlock(bool& usedPendingCommand)
 
   if (status)
   {
-    m_sendBlockBuf[1] = ++m_lastUsedSeqNum;
-    m_sendBlockBuf[2] = (uint8_t)type;
-    m_sendBlockBuf[m_sendBlockBuf[0]] = s_endOfBlock;
+    if (m_useSequenceNums)
+    {
+      m_sendBlockBuf[1] = ++m_lastUsedSeqNum;
+      m_sendBlockBuf[2] = (uint8_t)type;
+    }
+    else
+    {
+      m_sendBlockBuf[1] = (uint8_t)type;
+    }
+
+    if (m_lastBlockByteIsChecksum)
+    {
+      // compute 8-bit checksum and store in the last byte of the block
+      m_sendBlockBuf[m_sendBlockBuf[0]] = m_sendBlockBuf[0];
+      for (int i = 1; i < m_sendBlockBuf[0]; i++)
+      {
+        m_sendBlockBuf[m_sendBlockBuf[0]] += m_sendBlockBuf[i];
+      }
+    }
+    else
+    {
+      m_sendBlockBuf[m_sendBlockBuf[0]] = s_endOfBlock;
+    }
   }
 
   return status;
@@ -498,54 +547,78 @@ bool Kwp71::slowInit(uint8_t address, int databits, int parity)
 }
 
 /**
- * Reads bytes from the serial port until the entire provided sequence
- * is seen (in order) or the allowed time expires. Some (all?) FTDI
- * devices will have a buffer full of bitbang mode status bytes after
- * switching back to serial/FIFO mode, so we need to simply read until
- * we find the desired sequence.
+ * Receives a sequence of bytes being transmitted by the ECU that starts with
+ * the value 0x55. Returns true if the expected number of bytes following 0x55
+ * are received before the timeout; false otherwise.
+ * Note: Some (all?) FTDI devices will have a buffer full of bitbang mode status
+ * bytes after switching back to serial/FIFO mode, so we need to simply read
+ * until the sequence starting with 0x55 is found.
  */
-bool Kwp71::waitForByteSequence(const std::vector<uint8_t>& sequence,
-                                std::chrono::milliseconds timeout)
+bool Kwp71::waitForISOSequence(std::chrono::milliseconds timeout,
+                               std::vector<uint8_t>& isoBytes)
 {
   uint8_t curByte = 0;
   int matchedBytes = 0;
+  isoBytes.clear();
   const std::chrono::time_point start = std::chrono::steady_clock::now();
   const std::chrono::time_point end = start + timeout;
 
-  while ((matchedBytes < sequence.size()) && (std::chrono::steady_clock::now() < end))
+  while ((matchedBytes < m_isoKeywordNumBytes) &&
+         (std::chrono::steady_clock::now() < end))
   {
     if (ftdi_read_data(&m_ftdi, &curByte, 1) == 1)
     {
-      if (curByte == sequence.at(matchedBytes))
+      if (((matchedBytes == 0) && (curByte == 0x55)) ||
+          (matchedBytes > 0))
       {
         matchedBytes++;
-      }
-      else
-      {
-        matchedBytes = 0;
+        isoBytes.push_back(curByte);
       }
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
 
-  return (matchedBytes == sequence.size());
+  if (m_verbose)
+  {
+    printf("Got ISO keyword sequence:");
+    for (int i = 0; i < isoBytes.size(); i++)
+    {
+      printf(" %02X", isoBytes.at(i));
+    }
+    printf("\n");
+  }
+
+  return (matchedBytes == m_isoKeywordNumBytes);
 }
 
 /**
- * Reads the three sync/keyword bytes that are transmitted by the ECU
+ * Reads the ISO sync/keyword bytes that are transmitted by the ECU
  * immediately after the 5-baud slow init, and replies with the bitwise
- * inversion of the third byte as an acknowledgement.
+ * inversion of the appropriate byte as an acknowledgement.
  */
 bool Kwp71::readAckKeywordBytes()
 {
   bool status = false;
-  const std::vector<uint8_t> kwp({0x55, 0x00, 0x81});
+  std::vector<uint8_t> isoBytes;
   
-  if (waitForByteSequence(kwp, std::chrono::milliseconds(1500)))
+  if (waitForISOSequence(std::chrono::milliseconds(1500), isoBytes))
   {
-    uint8_t echoByte = ~(kwp[2]);
-    std::this_thread::sleep_for(std::chrono::milliseconds(5));
-    status = writeSerial(&echoByte, 1) && readSerial(&echoByte, 1);
+    // check that the ISO keyword sequence is long enough to
+    // contain the index of the byte that we need to echo
+    if (isoBytes.size() > m_isoKeywordIndexToEcho)
+    {
+      uint8_t echoByte = isoBytes.at(m_isoKeywordIndexToEcho);
+      if (m_isoKeywordEchoIsInverted)
+      {
+        echoByte = ~echoByte;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(5));
+      status = writeSerial(&echoByte, 1) && readSerial(&echoByte, 1);
+    }
+    else
+    {
+      fprintf(stderr, "Error: ISO byte index to echo (%d) is not within the size of the ISO sequence (%d).\n", m_isoKeywordIndexToEcho, isoBytes.size());
+    }
   }
 
   return status;
@@ -637,8 +710,9 @@ bool Kwp71::sendCommand(Kwp71Command cmd, std::vector<uint8_t>& response)
 bool Kwp71::readRAM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data)
 {
   bool status = false;
+  const uint8_t blockOverhead = m_useSequenceNums ? 3 : 2;
 
-  if (numBytes <= (UINT8_MAX - 3))
+  if (numBytes <= (UINT8_MAX - blockOverhead))
   {
     Kwp71Command cmd;
     cmd.type = Kwp71BlockType::ReadRAM;
@@ -655,8 +729,9 @@ bool Kwp71::readRAM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data)
 bool Kwp71::readROM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data)
 {
   bool status = false;
+  const uint8_t blockOverhead = m_useSequenceNums ? 3 : 2;
 
-  if (numBytes <= (UINT8_MAX - 3))
+  if (numBytes <= (UINT8_MAX - blockOverhead))
   {
     Kwp71Command cmd;
     cmd.type = Kwp71BlockType::ReadROM;
@@ -673,8 +748,9 @@ bool Kwp71::readROM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data)
 bool Kwp71::readEEPROM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data)
 {
   bool status = false;
+  const uint8_t blockOverhead = m_useSequenceNums ? 3 : 2;
 
-  if (numBytes <= (UINT8_MAX - 3))
+  if (numBytes <= (UINT8_MAX - blockOverhead))
   {
     Kwp71Command cmd;
     cmd.type = Kwp71BlockType::ReadEEPROM;
@@ -691,10 +767,13 @@ bool Kwp71::readEEPROM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& da
 bool Kwp71::writeRAM(uint16_t addr, const std::vector<uint8_t>& data)
 {
   bool status = false;
+  const uint8_t blockOverhead = m_useSequenceNums ? 3 : 2;
 
   // Limit the maximum write payload to the size of the remaining
   // space in a single block (after accounting for the header/trailer).
-  if (data.size() <= (UINT8_MAX - 6)) // 249 bytes max
+  // This is a max of 249 bytes for the standard variant, or 250 bytes
+  // for FIAT9141.
+  if (data.size() <= (UINT8_MAX - blockOverhead - 3))
   {
     Kwp71Command cmd;
     cmd.type = Kwp71BlockType::WriteRAM;
@@ -716,10 +795,13 @@ bool Kwp71::writeRAM(uint16_t addr, const std::vector<uint8_t>& data)
 bool Kwp71::writeEEPROM(uint16_t addr, const std::vector<uint8_t>& data)
 {
   bool status = false;
+  const uint8_t blockOverhead = m_useSequenceNums ? 3 : 2;
 
   // Limit the maximum write payload to the size of the remaining
   // space in a single block (after accounting for the header/trailer).
-  if (data.size() <= (UINT8_MAX - 6)) // 249 bytes max
+  // This is a max of 249 bytes for the standard variant, or 250 bytes
+  // for FIAT9141.
+  if (data.size() <= (UINT8_MAX - blockOverhead - 3))
   {
     Kwp71Command cmd;
     cmd.type = Kwp71BlockType::WriteRAM;
@@ -744,9 +826,22 @@ bool Kwp71::writeEEPROM(uint16_t addr, const std::vector<uint8_t>& data)
  */
 void Kwp71::processReceivedBlock()
 {
-  m_lastReceivedBlockType = (Kwp71BlockType)(m_recvBlockBuf[2]);
-  m_lastUsedSeqNum = m_recvBlockBuf[1];
-  const uint8_t payloadLen = m_recvBlockBuf[0] - 3;
+  int payloadLen = 0;
+  int blockPayloadStartPos = 0;
+
+  if (m_useSequenceNums)
+  {
+    m_lastUsedSeqNum = m_recvBlockBuf[1];
+    m_lastReceivedBlockType = (Kwp71BlockType)(m_recvBlockBuf[2]);
+    payloadLen = m_recvBlockBuf[0] - 3;
+    blockPayloadStartPos = 3;
+  }
+  else
+  {
+    m_lastReceivedBlockType = (Kwp71BlockType)(m_recvBlockBuf[1]);
+    payloadLen = m_recvBlockBuf[0] - 2;
+    blockPayloadStartPos = 2;
+  }
 
   switch (m_lastReceivedBlockType)
   {
@@ -755,7 +850,7 @@ void Kwp71::processReceivedBlock()
   case Kwp71BlockType::Snapshot:
     break;
   case Kwp71BlockType::ASCIIString:
-    m_responseStringData.push_back(std::string(m_recvBlockBuf[3], payloadLen));
+    m_responseStringData.push_back(std::string(m_recvBlockBuf[blockPayloadStartPos], payloadLen));
     break;
   case Kwp71BlockType::ADCValue:
   case Kwp71BlockType::BinaryData:
@@ -764,11 +859,11 @@ void Kwp71::processReceivedBlock()
   case Kwp71BlockType::EEPROMContent:
   case Kwp71BlockType::ParametricData:
     // capture just the payload data of the block (i.e. the bytes
-    // *after* the length, seq. num, and block type, and *before*
-    // the 0x03 end-of-block marker
+    // *after* the length, seq. num (if used), and block title,
+    // and *before* the 0x03 end-of-block marker (or checksum)
     m_responseBinaryData.insert(m_responseBinaryData.end(),
-                                &m_recvBlockBuf[3],
-                                &m_recvBlockBuf[3 + payloadLen]);
+                                &m_recvBlockBuf[blockPayloadStartPos],
+                                &m_recvBlockBuf[blockPayloadStartPos + payloadLen]);
     break;
   }
 }
@@ -868,7 +963,7 @@ void Kwp71::commLoop()
     // This will ensure that the ECU also sees the connection as having
     // been terminated. A re-connection (with slow init) will not work unless
     // we're on the same page as the ECU.
-    std::this_thread::sleep_for(std::chrono::milliseconds(255));
+    std::this_thread::sleep_for(std::chrono::milliseconds(m_timeBeforeReconnectionMs));
   }
 }
 
