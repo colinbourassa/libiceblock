@@ -4,7 +4,6 @@
 
 #define FTDI_VID 0x0403
 #define FTDI_PID 0xfa20
-#define ECU_ADDR 0x10
 
 int main(int argc, char** argv)
 {
@@ -27,15 +26,16 @@ int main(int argc, char** argv)
       devices[i].description.c_str());
   }
 
+  const uint8_t ecuAddr = 0x10;
   int err = 0;
   printf("Attempting connection via FTDI %04x/%04x to ECU addr %02x...\n",
-    FTDI_VID, FTDI_PID, ECU_ADDR);
+    FTDI_VID, FTDI_PID, ecuAddr);
 
   // This is appropriate for Bosch Motronic 1.2 p/n 0 261 200 156 (E32 BMW 750iL)
   kwp.setProtocolVariant(Kwp71Variant::Standard);
   kwp.setBaud(4800);
 
-  if (kwp.connect(FTDI_VID, FTDI_PID, ECU_ADDR, err))
+  if (kwp.connect(FTDI_VID, FTDI_PID, ecuAddr, err))
   {
     printf("Connected successfully.\n");
     std::vector<uint8_t> data;
@@ -43,8 +43,8 @@ int main(int argc, char** argv)
     const uint8_t bytecount = 252;
     if (kwp.readROM(0x0000, bytecount, data))
     {
-      printf("Successfully read %d bytes.\n", bytecount);
-      for (int index = 0; index < bytecount; index++)
+      printf("Read %d bytes.\n", data.size());
+      for (int index = 0; index < data.size(); index++)
       {
         if (index && (index % 16 == 0))
         {
@@ -56,7 +56,7 @@ int main(int argc, char** argv)
     }
     else
     {
-      printf("readROM() failed.\n");
+      printf("Read failed.\n");
       status = -2;
     }
 
