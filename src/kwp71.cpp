@@ -338,12 +338,12 @@ bool Kwp71::populateBlock(bool& usedPendingCommand)
   {
   /** TODO: implement missing block types:
    *  ActivateActuators
-   *  EraseTroubleCodes
    *  ReadParamData
    *  RecordParamData
    */
   case Kwp71BlockType::Empty:
   case Kwp71BlockType::ReadTroubleCodes:
+  case Kwp71BlockType::EraseTroubleCodes:
   case Kwp71BlockType::RequestID:
   case Kwp71BlockType::RequestSnapshot:
   case Kwp71BlockType::Disconnect:
@@ -813,6 +813,19 @@ bool Kwp71::readFaultCodes(std::vector<uint8_t>& data)
 {
   Kwp71Command cmd;
   cmd.type = Kwp71BlockType::ReadTroubleCodes;
+  const bool status = sendCommand(cmd, data);
+  return status;
+}
+
+/**
+ * Sends a command to erase the stored fault codes on the ECU.
+ * Returns true when successful; false otherwise.
+ */
+bool Kwp71::eraseFaultCodes()
+{
+  std::vector<uint8_t> data;
+  Kwp71Command cmd;
+  cmd.type = Kwp71BlockType::EraseTroubleCodes;
   const bool status = sendCommand(cmd, data);
   return status;
 }

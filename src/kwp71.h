@@ -109,6 +109,7 @@ public:
   bool writeRAM(uint16_t addr, const std::vector<uint8_t>& data);
   bool writeEEPROM(uint16_t addr, const std::vector<uint8_t>& data);
   bool readFaultCodes(std::vector<uint8_t>& data);
+  bool eraseFaultCodes();
 
   static Kwp71Version getLibraryVersion();
   std::vector<FtdiDeviceInfo> enumerateFtdiDevices(const std::set<std::pair<uint16_t,uint16_t>>& extrtaPids = {});
