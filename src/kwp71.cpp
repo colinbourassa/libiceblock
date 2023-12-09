@@ -58,6 +58,7 @@ void Kwp71::setProtocolVariant(Kwp71Variant variant)
  * address and then opens the serial port device, using it to read the ECU's
  * keyword bytes.
  * Returns true if all of this is successful; false otherwise.
+ * TODO: Change this to use bus/device IDs rather than USB vid/pid.
  */
 bool Kwp71::connect(uint16_t vid, uint16_t pid, uint8_t addr, int& err)
 {
@@ -652,6 +653,11 @@ bool Kwp71::requestIDInfo(std::vector<std::string>& idResponse)
   return m_responseReadSuccess;
 }
 
+/**
+ * Returns true if the provided block type is a valid block to be sent from the
+ * tester to the ECU (as opposed to a block type that is only ever returned from
+ * the ECU to the tester).
+ */
 bool Kwp71::isValidCommandFromTester(Kwp71BlockType type) const
 {
   switch (type)
@@ -676,8 +682,9 @@ bool Kwp71::isValidCommandFromTester(Kwp71BlockType type) const
 }
 
 /**
- * Queues a command to be sent to the ECU at the next opportunity, and waits
- * to receive the response.
+ * Sends the provided command the ECU at the next opportunity (i.e. when the ECU
+ * is finished sending data from any previous command), and waits to receive the
+ * response.
  */
 bool Kwp71::sendCommand(Kwp71Command cmd, std::vector<uint8_t>& response)
 {
@@ -707,6 +714,11 @@ bool Kwp71::sendCommand(Kwp71Command cmd, std::vector<uint8_t>& response)
   return m_responseReadSuccess;
 }
 
+/**
+ * Sends a command to read data from ECU RAM. Returns true when the command was
+ * successful and data was returned; false otherwise. When successful, the
+ * returned data is stored in the provided vector.
+ */
 bool Kwp71::readRAM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data)
 {
   bool status = false;
@@ -726,6 +738,11 @@ bool Kwp71::readRAM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data)
   return status;
 }
 
+/**
+ * Sends a command to read data from ECU ROM. Returns true when the command was
+ * successful and data was returned; false otherwise. When successful, the
+ * returned data is stored in the provided vector.
+ */
 bool Kwp71::readROM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data)
 {
   bool status = false;
@@ -745,6 +762,11 @@ bool Kwp71::readROM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data)
   return status;
 }
 
+/**
+ * Sends a command to read data from ECU EEPROM. Returns true when the command
+ * was successful and data was returned; false otherwise. When successful, the
+ * returned data is stored in the provided vector.
+ */
 bool Kwp71::readEEPROM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data)
 {
   bool status = false;
@@ -764,6 +786,23 @@ bool Kwp71::readEEPROM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& da
   return status;
 }
 
+/**
+ * Sends a command to read fault code data from the ECU. Returns true when the
+ * command was successful and data was returned; false otherwise. When
+ * successful, the returned data is stored in the provided vector.
+ */
+bool Kwp71::readFaultCodes(std::vector<uint8_t>& data)
+{
+  Kwp71Command cmd;
+  cmd.type = Kwp71BlockType::ReadTroubleCodes;
+  const bool status = sendCommand(cmd, data);
+  return status;
+}
+
+/**
+ * Sends a command to write the provided data to the specified address in the
+ * ECU's RAM. Returns true when successful; false otherwise.
+ */
 bool Kwp71::writeRAM(uint16_t addr, const std::vector<uint8_t>& data)
 {
   bool status = false;
@@ -792,6 +831,10 @@ bool Kwp71::writeRAM(uint16_t addr, const std::vector<uint8_t>& data)
   return status;
 }
 
+/**
+ * Sends a command to write the provided data to the specified address in the
+ * ECU's EEPROM. Returns true when successful; false otherwise.
+ */
 bool Kwp71::writeEEPROM(uint16_t addr, const std::vector<uint8_t>& data)
 {
   bool status = false;
@@ -967,6 +1010,11 @@ void Kwp71::commLoop()
   }
 }
 
+/**
+ * Retrieves bus number, device number, and manufacturer description for each
+ * FTDI device in the provided ftdi_device_list. Returns the number of devices
+ * for which the identifying information was successfully read.
+ */
 int Kwp71::getFtdiDeviceInfo(ftdi_device_list* list, int listCount, std::vector<FtdiDeviceInfo>& deviceInfo)
 {
   constexpr int usbStrLen = 256;
@@ -995,6 +1043,11 @@ int Kwp71::getFtdiDeviceInfo(ftdi_device_list* list, int listCount, std::vector<
   return count;
 }
 
+/**
+ * Identifies all FTDI USB devices connected to the system by checking for known
+ * combinations of vendor IDs and product IDs, including certain third-party
+ * IDs and any IDs provided in the extraPids parameter.
+ */
 std::vector<FtdiDeviceInfo> Kwp71::enumerateFtdiDevices(const std::set<std::pair<uint16_t,uint16_t>>& extraPids)
 {
   ftdi_device_list* list;
