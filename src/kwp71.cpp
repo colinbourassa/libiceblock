@@ -5,6 +5,9 @@
 #include <mutex>
 #include <unistd.h>
 
+/**
+ * Returns the version of the libkwp71 build in use.
+ */
 Kwp71Version Kwp71::getLibraryVersion()
 {
   Kwp71Version ver;
@@ -16,11 +19,24 @@ Kwp71Version Kwp71::getLibraryVersion()
   return ver;
 }
 
+/**
+ * Construct with a flag that determines whether the library will generate
+ * verbose output on stdout.
+ */
 Kwp71::Kwp71(bool verbose) : m_verbose(verbose)
 {
   ftdi_init(&m_ftdi);
 }
 
+/**
+ * Sets a number of parameters that are specific to a particular variant of the
+ * protocol. These include the default baud rate, the expectation of echoed
+ * bytes, whether each block is trailed with a checksum byte, and other changes.
+ * Generally, you will want to call this routine with the variant that is
+ * closest to the protocol implementation you are trying to use, and then, if
+ * necessary, call one or more of the set*() routines to adjust any parameters
+ * that need to have a value different from their default.
+ */
 void Kwp71::setProtocolVariant(Kwp71Variant variant)
 {
   if (variant == Kwp71Variant::Standard)
@@ -323,7 +339,6 @@ bool Kwp71::populateBlock(bool& usedPendingCommand)
   /** TODO: implement missing block types:
    *  ActivateActuators
    *  EraseTroubleCodes
-   *  ReadADCChannel
    *  ReadParamData
    *  RecordParamData
    */
@@ -790,6 +805,9 @@ bool Kwp71::readEEPROM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& da
  * Sends a command to read fault code data from the ECU. Returns true when the
  * command was successful and data was returned; false otherwise. When
  * successful, the returned data is stored in the provided vector.
+ * Note: The FIAT-9141 spec document indicates that the fault code data is
+ * arranged in one 5-byte group for each code. This format might hold for other
+ * KWP71-supporting ECUs as well.
  */
 bool Kwp71::readFaultCodes(std::vector<uint8_t>& data)
 {
