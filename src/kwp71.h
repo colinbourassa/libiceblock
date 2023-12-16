@@ -38,7 +38,7 @@ enum class Kwp71BlockType
   ReadRAM           = 0x01,
   WriteRAM          = 0x02,
   ReadROM           = 0x03,
-  ActivateActuators = 0x04,
+  ActivateActuator  = 0x04,
   EraseTroubleCodes = 0x05,
   Disconnect        = 0x06,
   ReadTroubleCodes  = 0x07,
@@ -111,6 +111,7 @@ public:
   bool readEEPROM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data);
   bool writeRAM(uint16_t addr, const std::vector<uint8_t>& data);
   bool writeEEPROM(uint16_t addr, const std::vector<uint8_t>& data);
+  bool activateActuator(uint8_t index);
   bool readFaultCodes(std::vector<uint8_t>& data);
   bool eraseFaultCodes();
 

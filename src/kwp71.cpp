@@ -375,7 +375,6 @@ bool Kwp71::populateBlock(bool& usedPendingCommand)
   switch (type)
   {
   /** TODO: implement missing block types:
-   *  ActivateActuators
    *  ReadParamData
    *  RecordParamData
    */
@@ -393,6 +392,7 @@ bool Kwp71::populateBlock(bool& usedPendingCommand)
     m_sendBlockBuf[0] = sizeOfEmptyBlock + payload.size();
     memcpy(&m_sendBlockBuf[payloadStartPos], &payload[0], payload.size());
     break;
+  case Kwp71BlockType::ActivateActuator:
   case Kwp71BlockType::ReadADCChannel:
     if (payload.size() == 1)
     {
@@ -719,7 +719,7 @@ bool Kwp71::isValidCommandFromTester(Kwp71BlockType type) const
   case Kwp71BlockType::ReadRAM:
   case Kwp71BlockType::WriteRAM:
   case Kwp71BlockType::ReadROM:
-  case Kwp71BlockType::ActivateActuators:
+  case Kwp71BlockType::ActivateActuator:
   case Kwp71BlockType::EraseTroubleCodes:
   case Kwp71BlockType::ReadTroubleCodes:
   case Kwp71BlockType::ReadADCChannel:
@@ -929,6 +929,19 @@ bool Kwp71::writeEEPROM(uint16_t addr, const std::vector<uint8_t>& data)
     status = sendCommand(cmd, response);
   }
 
+  return status;
+}
+
+/**
+ * Sends a command to activate the specified actuator.
+ */
+bool Kwp71::activateActuator(uint8_t index)
+{
+  std::vector<uint8_t> data;
+  Kwp71Command cmd;
+  cmd.type = Kwp71BlockType::ActivateActuator;
+  cmd.payload = std::vector<uint8_t>({index});
+  const bool status = sendCommand(cmd, data);
   return status;
 }
 
