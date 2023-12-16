@@ -30,6 +30,8 @@ struct FtdiDeviceInfo
     serial(_serial) {}
 };
 
+// TODO: It seems that 0x3A is probably the command to request
+// fault codes for Motronic 5.2 (F355 / tipo 129)
 enum class Kwp71BlockType
 {
   RequestID         = 0x00,
@@ -99,7 +101,8 @@ public:
   inline void setUseSequenceNumbers(bool useSequenceNums)
     { m_useSequenceNums = useSequenceNums; }
 
-  bool connect(uint16_t vid, uint16_t pid, uint8_t addr, int& err);
+  bool connectByDeviceId(uint16_t vid, uint16_t pid, uint8_t ecuAddr);
+  bool connectByBusAddr(uint8_t bus, uint8_t addr, uint8_t ecuAddr);
   void disconnect();
   bool requestIDInfo(std::vector<std::string>& idResponse);
   bool sendCommand(Kwp71Command cmd, std::vector<uint8_t>& response);
@@ -154,6 +157,7 @@ private:
 
   static constexpr uint8_t s_endOfBlock = 0x03;
 
+  bool initAndStartCommunication();
   bool waitForISOSequence(std::chrono::milliseconds timeout,
                           std::vector<uint8_t>& isoBytes);
   bool isConnectionActive() const;

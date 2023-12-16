@@ -68,20 +68,17 @@ void Kwp71::setProtocolVariant(Kwp71Variant variant)
 }
 
 /**
- * Attempts a connection using provided protocol parameters, which may be
- * different than those used by official/standard implementations of the
- * KWP71 protocol. Performs the slow init sequence using the provided ECU
- * address and then opens the serial port device, using it to read the ECU's
- * keyword bytes.
+ * Attempts a connection using an FTDI device specified by bus ID and bus
+ * address. Performs the slow init sequence using the provided ECU address and
+ * then opens the serial port device, using it to read the ECU's keyword bytes.
  * Returns true if all of this is successful; false otherwise.
- * TODO: Change this to use bus/device IDs rather than USB vid/pid.
  */
-bool Kwp71::connect(uint16_t vid, uint16_t pid, uint8_t addr, int& err)
+bool Kwp71::connectByBusAddr(uint8_t bus, uint8_t addr, uint8_t ecuAddr)
 {
   bool status = false;
   std::unique_lock<std::mutex> lock(m_connectMutex);
 
-  m_ecuAddr = addr;
+  m_ecuAddr = ecuAddr;
   m_connectionActive = false;
   m_shutdown = false;
 
@@ -89,52 +86,92 @@ bool Kwp71::connect(uint16_t vid, uint16_t pid, uint8_t addr, int& err)
   {
     if (ftdi_set_interface(&m_ftdi, INTERFACE_A) == 0)
     {
-      if ((ftdi_usb_open(&m_ftdi, vid, pid) == 0))
+      if ((ftdi_usb_open_bus_addr(&m_ftdi, bus, addr) == 0))
       {
-        ftdi_tcioflush(&m_ftdi);
-        if (slowInit(m_ecuAddr, m_initDataBits, m_initParity))
-        {
-          if (setFtdiSerialProperties())
-          {
-            if (readAckKeywordBytes())
-            {
-              m_connectionActive = true;
-              m_ifThreadPtr = std::make_unique<std::thread>(threadEntry, this);
-              err = 0;
-              status = true;
-            }
-            else
-            {
-              // readAckKeywordBytes() failed
-              err = -1;
-              ftdi_usb_close(&m_ftdi);
-            }
-          }
-          else
-          {
-            // setFtdiSerialProperties() failed
-            err = -2;
-            ftdi_usb_close(&m_ftdi);
-          }
-        }
-        else
-        {
-          // slowInit() failed
-          err = -3;
-          ftdi_usb_close(&m_ftdi);
-        }
+        status = initAndStartCommunication();
       }
-      else
+      else if (m_verbose)
       {
-        // ftdi_usb_open() failed
-        err = -4;
+        fprintf(stderr, "Error: ftdi_usb_open() failed for bus %03d / addr %03d\n", bus, addr);
       }
     }
-    else
+    else if (m_verbose)
     {
-      // ftdi_set_interface() failed
-      err = -5;
+      fprintf(stderr, "Error: ftdi_set_interface() failed.\n");
     }
+  }
+
+  return status;
+}
+
+/**
+ * Attempts a connection using an FTDI device specified by vendor ID and product
+ * ID. Performs the slow init sequence using the provided ECU address and then
+ * opens the serial port device, using it to read the ECU's keyword bytes.
+ * Returns true if all of this is successful; false otherwise.
+ */
+bool Kwp71::connectByDeviceId(uint16_t vendorId, uint16_t productId, uint8_t ecuAddr)
+{
+  bool status = false;
+  std::unique_lock<std::mutex> lock(m_connectMutex);
+
+  m_ecuAddr = ecuAddr;
+  m_connectionActive = false;
+  m_shutdown = false;
+
+  if (m_ifThreadPtr == nullptr)
+  {
+    if (ftdi_set_interface(&m_ftdi, INTERFACE_A) == 0)
+    {
+      if ((ftdi_usb_open(&m_ftdi, vendorId, productId) == 0))
+      {
+        status = initAndStartCommunication();
+      }
+      else if (m_verbose)
+      {
+        fprintf(stderr, "Error: ftdi_usb_open() failed for VID %04X / PID %04X\n", vendorId, productId);
+      }
+    }
+    else if (m_verbose)
+    {
+      fprintf(stderr, "Error: ftdi_set_interface() failed.\n");
+    }
+  }
+
+  return status;
+}
+
+/**
+ * Performs the slow init sequence, sets up the FTDI device for the normal
+ * communication, and reads/acknowledges the keyword byte sequence.
+ */
+bool Kwp71::initAndStartCommunication()
+{
+  bool status = false;
+  ftdi_tcioflush(&m_ftdi);
+  if (slowInit(m_ecuAddr, m_initDataBits, m_initParity))
+  {
+    if (setFtdiSerialProperties())
+    {
+      if (readAckKeywordBytes())
+      {
+        m_connectionActive = true;
+        m_ifThreadPtr = std::make_unique<std::thread>(threadEntry, this);
+        status = true;
+      }
+      else if (m_verbose)
+      {
+        fprintf(stderr, "Error receiving/acknowledging keyword byte sequence.\n");
+      }
+    }
+    else if (m_verbose)
+    {
+      fprintf(stderr, "Error setting FTDI serial properties after slow init.\n");
+    }
+  }
+  else if (m_verbose)
+  {
+    fprintf(stderr, "Error during slow init sequence.\n");
   }
 
   return status;
@@ -153,6 +190,7 @@ void Kwp71::disconnect()
     m_shutdown = true;
     m_ifThreadPtr->join();
   }
+  m_ifThreadPtr = nullptr;
   ftdi_usb_close(&m_ftdi);
   ftdi_deinit(&m_ftdi);
 }
@@ -594,7 +632,7 @@ bool Kwp71::waitForISOSequence(std::chrono::milliseconds timeout,
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
 
-  if (m_verbose)
+  if (m_verbose && isoBytes.size())
   {
     printf("Got ISO keyword sequence:");
     for (int i = 0; i < isoBytes.size(); i++)

@@ -26,22 +26,26 @@ int main(int argc, char** argv)
       devices[i].description.c_str());
   }
 
-  const uint8_t ecuAddr = 0x10;
-  int err = 0;
+  // This is appropriate for Bosch Motronic 1.2 p/n 0 261 200 156 (E32 BMW 750iL)
+  //kwp.setProtocolVariant(Kwp71Variant::Standard);
+  //kwp.setBaud(4800);
+  //const uint8_t ecuAddr = 0x10;
+
+  // This is for TRW airbag ECU (p/n 60631206, 46538798, and 60615633)
+  kwp.setProtocolVariant(Kwp71Variant::FIAT9141);
+  const uint8_t ecuAddr = 0x80;
+
   printf("Attempting connection via FTDI %04x/%04x to ECU addr %02x...\n",
     FTDI_VID, FTDI_PID, ecuAddr);
 
-  // This is appropriate for Bosch Motronic 1.2 p/n 0 261 200 156 (E32 BMW 750iL)
-  kwp.setProtocolVariant(Kwp71Variant::Standard);
-  kwp.setBaud(4800);
-
-  if (kwp.connect(FTDI_VID, FTDI_PID, ecuAddr, err))
+  if (kwp.connectByDeviceId(FTDI_VID, FTDI_PID, ecuAddr))
   {
     printf("Connected successfully.\n");
     std::vector<uint8_t> data;
 
     const uint8_t bytecount = 252;
-    if (kwp.readROM(0x0000, bytecount, data))
+    //if (kwp.readROM(0x0000, bytecount, data))
+    if (kwp.readFaultCodes(data))
     {
       printf("Read %d bytes.\n", data.size());
       for (int index = 0; index < data.size(); index++)
