@@ -55,10 +55,21 @@ configure_file ("${SOURCE_SUBDIR}/kwp71_version.h.in"
 
 include_directories ("${CMAKE_SOURCE_DIR}/src" "${CMAKE_BINARY_DIR}" "${LIBRARY_USB_INCLUDE_DIRS}")
 
+set (ALL_SOURCE_FILES
+       "${SOURCE_SUBDIR}/BlockExchangeProtocol.cpp"
+       "${SOURCE_SUBDIR}/BlockExchangeProtocol.h"
+       "${SOURCE_SUBDIR}/Fiat9141.cpp"
+       "${SOURCE_SUBDIR}/Fiat9141.h"
+       "${SOURCE_SUBDIR}/KWP71.cpp"
+       "${SOURCE_SUBDIR}/KWP71.h"
+       "${SOURCE_SUBDIR}/library_info.cpp"
+       "${SOURCE_SUBDIR}/library_info.h"
+    )
+
 if (BUILD_STATIC STREQUAL "ON")
-  add_library (kwp71 STATIC ${SOURCE_SUBDIR}/kwp71.cpp)
+  add_library (kwp71 STATIC ${ALL_SOURCE_FILES})
 else()
-  add_library (kwp71 SHARED ${SOURCE_SUBDIR}/kwp71.cpp)
+  add_library (kwp71 SHARED ${ALL_SOURCE_FILES})
 endif()
 
 target_link_libraries (kwp71 usb-1.0 ftdi1)
