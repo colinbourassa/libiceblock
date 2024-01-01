@@ -87,36 +87,13 @@ void KWP71::processReceivedBlock()
 }
 
 /**
- * Populates a local buffer with the contents of a block to be transmitted.
+ * Checks the provided payload length/content against the associated
+ * block title and determines if they represent a valid combination.
  */
-bool KWP71::populateBlock(bool& usedPendingCommand)
+bool KWP71::checkValidityOfBlockAndPayload(uint8_t title, const std::vector<uint8_t>& payload) const
 {
   bool status = false;
-  KWP71BlockType type;
-  std::vector<uint8_t> payload;
-
-/// TODO: Capture this process in a base class function
-  const bool ecuReadyForCmd = (m_lastReceivedBlockType == KWP71BlockType::Empty);
-
-  if (ecuReadyForCmd && m_commandIsPending)
-  {
-    type = m_pendingCmd.type;
-    payload = m_pendingCmd.payload;
-    usedPendingCommand = true;
-  }
-  else
-  {
-    type = KWP71BlockType::Empty;
-    payload = {};
-    usedPendingCommand = false;
-  }
-//////////
-
-/// TODO: and this could probably be moved to the base class too
-  const uint8_t sizeOfEmptyBlock = useSequenceNums() ? 3 : 2;
-  const uint8_t payloadStartPos = useSequenceNums() ? 3 : 2;
-//////////
-
+  const KWP71BlockType type = static_cast<KWP71BlockType>(title);
   switch (type)
   {
   /** TODO: implement missing block types:
@@ -129,70 +106,26 @@ bool KWP71::populateBlock(bool& usedPendingCommand)
   case KWP71BlockType::RequestID:
   case KWP71BlockType::RequestSnapshot:
   case KWP71BlockType::Disconnect:
-    status = true;
-    m_sendBlockBuf[0] = sizeOfEmptyBlock;
+    status = (payload.size() == 0);
     break;
   case KWP71BlockType::ReadParamData:
     status = true;
-    m_sendBlockBuf[0] = sizeOfEmptyBlock + payload.size();
-    memcpy(&m_sendBlockBuf[payloadStartPos], &payload[0], payload.size());
     break;
   case KWP71BlockType::ActivateActuator:
   case KWP71BlockType::ReadADCChannel:
-    if (payload.size() == 1)
-    {
-      status = true;
-      m_sendBlockBuf[0] = sizeOfEmptyBlock + 1;
-      m_sendBlockBuf[payloadStartPos] = payload[0];
-    }
+    status = (payload.size() == 1);
     break;
   case KWP71BlockType::ReadRAM:
   case KWP71BlockType::ReadROM:
   case KWP71BlockType::ReadEEPROM:
-    if (payload.size() == 3)
-    {
-      status = true;
-      m_sendBlockBuf[0] = sizeOfEmptyBlock + 3;
-      memcpy(&m_sendBlockBuf[payloadStartPos], &payload[0], payload.size());
-    }
+    status = (payload.size() == 3);
     break;
   case KWP71BlockType::WriteRAM:
   case KWP71BlockType::WriteEEPROM:
-    if (payload.size() == (payload[0] + 3))
-    {
-      status = true;
-      m_sendBlockBuf[0] = sizeOfEmptyBlock + payload.size();
-      memcpy(&m_sendBlockBuf[payloadStartPos], &payload[0], payload.size());
-    }
+    status = (payload.size() == (payload[0] + 3));
+    break;
   default:
     break;
-  }
-
-  if (status)
-  {
-    if (useSequenceNums())
-    {
-      m_sendBlockBuf[1] = ++m_lastUsedSeqNum;
-      m_sendBlockBuf[2] = (uint8_t)type;
-    }
-    else
-    {
-      m_sendBlockBuf[1] = (uint8_t)type;
-    }
-
-    if (m_lastBlockByteIsChecksum)
-    {
-      // compute 8-bit checksum and store in the last byte of the block
-      m_sendBlockBuf[m_sendBlockBuf[0]] = m_sendBlockBuf[0];
-      for (int i = 1; i < m_sendBlockBuf[0]; i++)
-      {
-        m_sendBlockBuf[m_sendBlockBuf[0]] += m_sendBlockBuf[i];
-      }
-    }
-    else
-    {
-      m_sendBlockBuf[m_sendBlockBuf[0]] = s_endOfBlock;
-    }
   }
 
   return status;
@@ -305,7 +238,7 @@ bool KWP71::readROM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data)
   if (numBytes <= (UINT8_MAX - blockOverhead))
   {
     CommandBlock cmd;
-    cmd.type = KWP71BlockType::ReadROM;
+    cmd.type = static_cast<uint8_t>(KWP71BlockType::ReadROM);
     cmd.payload = std::vector<uint8_t>({
       numBytes,
       static_cast<uint8_t>(addr >> 8),
@@ -329,7 +262,7 @@ bool KWP71::readEEPROM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& da
   if (numBytes <= (UINT8_MAX - blockOverhead))
   {
     CommandBlock cmd;
-    cmd.type = KWP71BlockType::ReadEEPROM;
+    cmd.type = static_cast<uint8_t>(KWP71BlockType::ReadEEPROM);
     cmd.payload = std::vector<uint8_t>({
       numBytes,
       static_cast<uint8_t>(addr >> 8),
@@ -356,7 +289,7 @@ bool KWP71::writeRAM(uint16_t addr, const std::vector<uint8_t>& data)
   if (data.size() <= (UINT8_MAX - blockOverhead - 3))
   {
     CommandBlock cmd;
-    cmd.type = KWP71BlockType::WriteRAM;
+    cmd.type = static_cast<uint8_t>(KWP71BlockType::WriteRAM);
     cmd.payload = std::vector<uint8_t>(
     {
       static_cast<uint8_t>(data.size()),
@@ -388,7 +321,7 @@ bool KWP71::writeEEPROM(uint16_t addr, const std::vector<uint8_t>& data)
   if (data.size() <= (UINT8_MAX - blockOverhead - 3))
   {
     CommandBlock cmd;
-    cmd.type = KWP71BlockType::WriteRAM;
+    cmd.type = static_cast<uint8_t>(KWP71BlockType::WriteRAM);
     cmd.payload = std::vector<uint8_t>(
     {
       static_cast<uint8_t>(data.size()),

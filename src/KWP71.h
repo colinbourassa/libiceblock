@@ -55,17 +55,18 @@ protected:
   virtual inline bool isoKeywordEchoIsInverted() const override { return true; }
   virtual inline int isoKeywordNumBytes() const override { return 3; }
   virtual inline bool useSequenceNums() const { return true; }
+  virtual inline BlockTrailerType trailerType() const { return BlockTrailerType::Fixed03; }
+  virtual inline uint8_t emptyAckBlockTitle() const { return static_cast<uint8_t>(KWP71BlockType::Empty); }
 
   virtual bool doPostKeywordSequence();
   virtual bool lastReceivedBlockWasEmpty() const;
   virtual bool lastReceivedBlockWasNack() const;
   virtual void processReceivedBlock();
   virtual bool isValidCommandFromTester(uint8_t type) const override;
+  virtual bool checkValidityOfBlockAndPayload(uint8_t title, const std::vector<uint8_t>& payload) const override;
 
 private:
-  uint8_t m_lastUsedSeqNum = 0;
   KWP71BlockType m_lastReceivedBlockType = KWP71BlockType::Empty;
-  static constexpr uint8_t s_endOfBlock = 0x03;
 
   bool populateBlock(bool& usedPendingCommand);
 };

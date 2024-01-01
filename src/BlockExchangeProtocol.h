@@ -36,6 +36,13 @@ struct CommandBlock
   std::vector<uint8_t> payload;
 };
 
+enum class BlockTrailerType
+{
+  Fixed03,
+  Checksum8Bit,
+  Checksum16Bit
+};
+
 class BlockExchangeProtocol
 {
 public:
@@ -66,9 +73,15 @@ protected:
   virtual inline int isoKeywordIndexToEcho() const = 0;
   virtual inline bool isoKeywordEchoIsInverted() const = 0;
   virtual inline int isoKeywordNumBytes() const = 0;
+  virtual inline bool useSequenceNums() const = 0;
+  virtual inline BlockTrailerType trailerType() const = 0;
+  virtual inline uint8_t emptyAckBlockTitle() const = 0;
+  virtual bool lastReceivedBlockWasEmpty() const = 0;
+  virtual bool lastReceivedBlockWasNack() const = 0;
 
   uint8_t m_sendBlockBuf[256];
   uint8_t m_recvBlockBuf[256];
+  uint8_t m_lastUsedSeqNum = 0;
   std::vector<uint8_t> m_responseBinaryData;
   std::vector<std::string> m_responseStringData;
 
@@ -77,11 +90,9 @@ protected:
   inline bool shutdownRequested() const { return m_shutdown; }
 
   virtual bool isValidCommandFromTester(uint8_t type) const { return true; }
+  virtual bool checkValidityOfBlockAndPayload(uint8_t title, const std::vector<uint8_t>& payload) const;
   virtual void processReceivedBlock() = 0;
-  virtual bool populateBlock(bool& usedPendingCommand) = 0;
   virtual bool doPostKeywordSequence();
-  virtual bool lastReceivedBlockWasEmpty() const = 0;
-  virtual bool lastReceivedBlockWasNack() const = 0;
 
 private:
   bool m_verbose;
@@ -101,7 +112,14 @@ private:
   std::mutex m_commandMutex;
   struct ftdi_context m_ftdi;
 
+  void setBlockSizePrefix(int payloadSize);
+  void setBlockSequenceNum();
+  void setBlockTitle(uint8_t title);
+  void setBlockPayload(const std::vector<uint8_t>& payload);
+  void setBlockTrailer();
+
   bool initAndStartCommunication();
+  bool populateBlock(bool& usedPendingCommand);
   bool waitForISOSequence(std::chrono::milliseconds timeout,
                           std::vector<uint8_t>& isoBytes);
   bool isConnectionActive() const;

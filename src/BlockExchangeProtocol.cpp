@@ -147,8 +147,127 @@ bool BlockExchangeProtocol::isConnectionActive() const
 }
 
 /**
- * Sends a KWP-71 block by transmitting it one byte at a time. For certain
- * variants of the protocol, the transmitting side must wait for the inverse of
+ * Populates the transmit buffer with all the appropriate parts of
+ * a protocol block.
+ */
+bool BlockExchangeProtocol::populateBlock(bool& usedPendingCmd)
+{
+  bool status = false;
+  uint8_t blockTitle = 0;
+  std::vector<uint8_t> payload;
+
+  if (lastReceivedBlockWasEmpty() && m_commandIsPending)
+  {
+    blockTitle = m_pendingCmd.type;
+    payload = m_pendingCmd.payload;
+    usedPendingCmd = true;
+  }
+  else
+  {
+    blockTitle = emptyAckBlockTitle();
+    usedPendingCmd = false;
+  }
+
+  if (checkValidityOfBlockAndPayload(blockTitle, payload))
+  {
+    setBlockSizePrefix(payload.size());
+    setBlockSequenceNum();
+    setBlockTitle(blockTitle);
+    setBlockPayload(payload);
+    setBlockTrailer();
+    status = true;
+  }
+
+  return status;
+}
+
+/**
+ * Sets the first byte in the block to reflect the number of the bytes
+ * that follow. There will be one byte required for the block title,
+ * plus a sequence number byte (for certain protocols), plus the
+ * size of the payload (if any), plus the size of the trailer (which
+ * will be either one or two bytes, again depending on protocol variant.
+ */
+void BlockExchangeProtocol::setBlockSizePrefix(int payloadSize)
+{
+  const uint8_t seqNumSize = (useSequenceNums() ? 1 : 0);
+  const uint8_t blockTrailerSize = (trailerType() == BlockTrailerType::Checksum16Bit) ? 2 : 1;
+  m_sendBlockBuf[0] = seqNumSize + 1 + payloadSize + blockTrailerSize;
+}
+
+/**
+ * Sets the appropriate byte in the transmit buffer to the block sequence
+ * number. If the protocol does not use sequence numbers, this function has no
+ * effect.
+ */
+void BlockExchangeProtocol::setBlockSequenceNum()
+{
+  if (useSequenceNums())
+  {
+    m_sendBlockBuf[1] = ++m_lastUsedSeqNum;
+  }
+}
+
+/**
+ * Sets the provided block title in the transmit buffer at the appropriate
+ * location (depending on whether the protocol reserves a byte for sequence
+ * numbers.)
+ */
+void BlockExchangeProtocol::setBlockTitle(uint8_t title)
+{
+  if (useSequenceNums())
+  {
+    m_sendBlockBuf[2] = title;
+  }
+  else
+  {
+    m_sendBlockBuf[1] = title;
+  }
+}
+
+/**
+ * Copies the provided payload bytes to the appropriate location in the
+ * transmit buffer.
+ */
+void BlockExchangeProtocol::setBlockPayload(const std::vector<uint8_t>& payload)
+{
+  const uint8_t payloadStartPos = useSequenceNums() ? 3 : 2;
+  memcpy(&m_sendBlockBuf[payloadStartPos], &payload[0], payload.size());
+}
+
+/**
+ * Sets the trailer byte(s) in the transmit buffer depending on the type of
+ * trailer used in in the protocol implementation.
+ */
+void BlockExchangeProtocol::setBlockTrailer()
+{
+  if (trailerType() == BlockTrailerType::Fixed03)
+  {
+    m_sendBlockBuf[m_sendBlockBuf[0]] = 0x03;
+  }
+  else if (trailerType() == BlockTrailerType::Checksum8Bit)
+  {
+    // compute 8-bit checksum and store in the last byte of the block
+    m_sendBlockBuf[m_sendBlockBuf[0]] = m_sendBlockBuf[0];
+    for (int i = 1; i < m_sendBlockBuf[0]; i++)
+    {
+      m_sendBlockBuf[m_sendBlockBuf[0]] += m_sendBlockBuf[i];
+    }
+  }
+  else if (trailerType() == BlockTrailerType::Checksum16Bit)
+  {
+    uint16_t checksum16 = 0;
+    for (int i = 0; i < m_sendBlockBuf[0]; i++)
+    {
+      checksum16 += m_sendBlockBuf[i];
+    }
+    // TODO: set trailer bytes
+  }
+}
+
+/**
+ * Sends a block by transmitting it one byte at a time. For certain
+ * protocols, the transmitting side must wait for the inverse of
  * each byte echoed by the receiver before transmitting the next byte (with the
  * exception of the last byte, which is not echoed.)
  * Returns true if the entire block was sent successfuly; false otherwise.
