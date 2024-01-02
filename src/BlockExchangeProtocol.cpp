@@ -7,10 +7,15 @@
 
 /**
  */
-BlockExchangeProtocol::BlockExchangeProtocol(bool verbose) :
+BlockExchangeProtocol::BlockExchangeProtocol(int baudRate, bool verbose) :
+  m_baudRate(baudRate),
   m_verbose(verbose)
 {
   ftdi_init(&m_ftdi);
+}
+
+BlockExchangeProtocol::~BlockExchangeProtocol()
+{
 }
 
 /**
@@ -164,7 +169,7 @@ bool BlockExchangeProtocol::populateBlock(bool& usedPendingCmd)
   }
   else
   {
-    blockTitle = emptyAckBlockTitle();
+    blockTitle = blockTitleForEmptyAck();
     usedPendingCmd = false;
   }
 
@@ -415,7 +420,7 @@ bool BlockExchangeProtocol::recvBlock()
  */
 bool BlockExchangeProtocol::setFtdiSerialProperties()
 {
-  int status = ftdi_set_baudrate(&m_ftdi, baudRate());
+  int status = ftdi_set_baudrate(&m_ftdi, m_baudRate);
   if (status == 0)
   {
     status = ftdi_set_line_property(&m_ftdi, BITS_8, STOP_BIT_1, NONE);
@@ -633,6 +638,34 @@ bool BlockExchangeProtocol::readAckKeywordBytes()
   }
 
   return status;
+}
+
+/**
+ * Queues a command to read the ID information from the ECU, which is returned
+ * as a collection of strings.
+ */
+bool BlockExchangeProtocol::requestIDInfo(std::vector<std::string>& idResponse)
+{
+  // wait until any previous command has been fully processed
+  std::unique_lock<std::mutex> lock(m_commandMutex);
+
+  m_pendingCmd.type = blockTitleForRequestID();
+  m_pendingCmd.payload = std::vector<uint8_t>();
+  m_commandIsPending = true;
+
+  // wait until the response from this command has been completely received
+  {
+    std::unique_lock<std::mutex> responseLock(m_responseMutex);
+    m_responseCondVar.wait(responseLock);
+  }
+
+  if (m_responseReadSuccess)
+  {
+    idResponse = m_responseStringData;
+    m_responseStringData.clear();
+  }
+
+  return m_responseReadSuccess;
 }
 
 /**

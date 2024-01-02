@@ -33,10 +33,11 @@ enum class KWP71BlockType
 class KWP71 : public BlockExchangeProtocol
 {
 public:
-  KWP71(bool verbose = false);
+  KWP71(bool verbose);
+  KWP71(int baudRate, bool verbose);
+
   bool activateActuator(uint8_t index);
 
-  bool requestIDInfo(std::vector<std::string>& idResponse);
   bool readRAM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data);
   bool readROM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data);
   bool readEEPROM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data);
@@ -47,7 +48,6 @@ public:
 
 protected:
   virtual inline bool bytesEchoedDuringBlockReceipt() const override { return true; }
-  virtual inline int baudRate() const override { return 9600; }
   virtual inline int initDataBits() const override { return 8; }
   virtual inline int initParity() const override { return 0; }
   virtual inline int timeBeforeReconnectMs() const override { return 260; }
@@ -56,7 +56,8 @@ protected:
   virtual inline int isoKeywordNumBytes() const override { return 3; }
   virtual inline bool useSequenceNums() const { return true; }
   virtual inline BlockTrailerType trailerType() const { return BlockTrailerType::Fixed03; }
-  virtual inline uint8_t emptyAckBlockTitle() const { return static_cast<uint8_t>(KWP71BlockType::Empty); }
+  virtual inline uint8_t blockTitleForEmptyAck() const { return static_cast<uint8_t>(KWP71BlockType::Empty); }
+  virtual inline uint8_t blockTitleForRequestID() const { return static_cast<uint8_t>(KWP71BlockType::RequestID); }
 
   virtual bool doPostKeywordSequence();
   virtual bool lastReceivedBlockWasEmpty() const;

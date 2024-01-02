@@ -46,27 +46,20 @@ enum class BlockTrailerType
 class BlockExchangeProtocol
 {
 public:
-  BlockExchangeProtocol(bool verbose);
+  BlockExchangeProtocol(int baudRate, bool verbose);
+  virtual ~BlockExchangeProtocol();
 
   bool connectByDeviceId(uint16_t vid, uint16_t pid, uint8_t ecuAddr);
   bool connectByBusAddr(uint8_t bus, uint8_t addr, uint8_t ecuAddr);
+  void setBaudRate(int baudRate) { m_baudRate = baudRate; }
   void disconnect();
   bool requestIDInfo(std::vector<std::string>& idResponse);
   bool sendCommand(CommandBlock cmd, std::vector<uint8_t>& response);
-  bool readRAM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data);
-  bool readROM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data);
-  bool readEEPROM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data);
-  bool writeRAM(uint16_t addr, const std::vector<uint8_t>& data);
-  bool writeEEPROM(uint16_t addr, const std::vector<uint8_t>& data);
-  bool activateActuator(uint8_t index);
-  bool readFaultCodes(std::vector<uint8_t>& data);
-  bool eraseFaultCodes();
 
   std::vector<FtdiDeviceInfo> enumerateFtdiDevices(const std::set<std::pair<uint16_t,uint16_t>>& extrtaPids = {});
 
 protected:
   virtual inline bool bytesEchoedDuringBlockReceipt() const = 0;
-  virtual inline int baudRate() const = 0;
   virtual inline int initDataBits() const = 0;
   virtual inline int initParity() const = 0;
   virtual inline int timeBeforeReconnectMs() const = 0;
@@ -75,10 +68,12 @@ protected:
   virtual inline int isoKeywordNumBytes() const = 0;
   virtual inline bool useSequenceNums() const = 0;
   virtual inline BlockTrailerType trailerType() const = 0;
-  virtual inline uint8_t emptyAckBlockTitle() const = 0;
+  virtual inline uint8_t blockTitleForEmptyAck() const = 0;
+  virtual inline uint8_t blockTitleForRequestID() const = 0;
   virtual bool lastReceivedBlockWasEmpty() const = 0;
   virtual bool lastReceivedBlockWasNack() const = 0;
 
+  int m_baudRate;
   uint8_t m_sendBlockBuf[256];
   uint8_t m_recvBlockBuf[256];
   uint8_t m_lastUsedSeqNum = 0;
@@ -90,9 +85,9 @@ protected:
   inline bool shutdownRequested() const { return m_shutdown; }
 
   virtual bool isValidCommandFromTester(uint8_t type) const { return true; }
-  virtual bool checkValidityOfBlockAndPayload(uint8_t title, const std::vector<uint8_t>& payload) const;
+  virtual bool checkValidityOfBlockAndPayload(uint8_t title, const std::vector<uint8_t>& payload) const = 0;
   virtual void processReceivedBlock() = 0;
-  virtual bool doPostKeywordSequence();
+  virtual bool doPostKeywordSequence() { return true; }
 
 private:
   bool m_verbose;

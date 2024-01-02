@@ -1,9 +1,15 @@
 #include "KWP71.h"
 
 KWP71::KWP71(bool verbose) :
-  BlockExchangeProtocol(verbose)
+  BlockExchangeProtocol(9600, verbose)
 {
 }
+
+KWP71::KWP71(int baudRate, bool verbose) :
+  BlockExchangeProtocol(baudRate, verbose)
+{
+}
+
 
 bool KWP71::doPostKeywordSequence()
 {
@@ -127,36 +133,7 @@ bool KWP71::checkValidityOfBlockAndPayload(uint8_t title, const std::vector<uint
   default:
     break;
   }
-
   return status;
-}
-
-/**
- * Queues a command to read the ID information from the ECU, which is returned
- * as a collection of strings.
- */
-bool KWP71::requestIDInfo(std::vector<std::string>& idResponse)
-{
-  // wait until any previous command has been fully processed
-  std::unique_lock<std::mutex> lock(m_commandMutex);
-
-  m_pendingCmd.type = KWP71BlockType::RequestID;
-  m_pendingCmd.payload = std::vector<uint8_t>();
-  m_commandIsPending = true;
-
-  // wait until the response from this command has been completely received
-  {
-    std::unique_lock<std::mutex> responseLock(m_responseMutex);
-    m_responseCondVar.wait(responseLock);
-  }
-
-  if (m_responseReadSuccess)
-  {
-    idResponse = m_responseStringData;
-    m_responseStringData.clear();
-  }
-
-  return m_responseReadSuccess;
 }
 
 /**
@@ -166,7 +143,7 @@ bool KWP71::activateActuator(uint8_t index)
 {
   std::vector<uint8_t> data;
   CommandBlock cmd;
-  cmd.type = KWP71BlockType::ActivateActuator;
+  cmd.type = static_cast<uint8_t>(KWP71BlockType::ActivateActuator);
   cmd.payload = std::vector<uint8_t>({index});
   const bool status = sendCommand(cmd, data);
   return status;
@@ -183,7 +160,7 @@ bool KWP71::activateActuator(uint8_t index)
 bool KWP71::readFaultCodes(std::vector<uint8_t>& data)
 {
   CommandBlock cmd;
-  cmd.type = KWP71BlockType::ReadTroubleCodes;
+  cmd.type = static_cast<uint8_t>(KWP71BlockType::ReadTroubleCodes);
   const bool status = sendCommand(cmd, data);
   return status;
 }
@@ -196,7 +173,7 @@ bool KWP71::eraseFaultCodes()
 {
   std::vector<uint8_t> data;
   CommandBlock cmd;
-  cmd.type = KWP71BlockType::EraseTroubleCodes;
+  cmd.type = static_cast<uint8_t>(KWP71BlockType::EraseTroubleCodes);
   const bool status = sendCommand(cmd, data);
   return status;
 }
@@ -214,7 +191,7 @@ bool KWP71::readRAM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data)
   if (numBytes <= (UINT8_MAX - blockOverhead))
   {
     CommandBlock cmd;
-    cmd.type = KWP71BlockType::ReadRAM;
+    cmd.type = static_cast<uint8_t>(KWP71BlockType::ReadRAM);
     cmd.payload = std::vector<uint8_t>({
       numBytes,
       static_cast<uint8_t>(addr >> 8),
