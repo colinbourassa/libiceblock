@@ -1,16 +1,16 @@
 #include "library_info.h"
-#include "kwp71_version.h"
+#include "iceblock_version.h"
 
 /**
  * Returns the version of this library build.
  */
-BlockProtocolLibraryVersion getLibraryVersion()
+IceblockVersion getIceblockVersion()
 {
-  BlockProtocolLibraryVersion ver;
+  IceblockVersion ver;
 
-  ver.major = KWP71_VER_MAJOR;
-  ver.minor = KWP71_VER_MINOR;
-  ver.patch = KWP71_VER_PATCH;
+  ver.major = ICEBLOCK_VER_MAJOR;
+  ver.minor = ICEBLOCK_VER_MINOR;
+  ver.patch = ICEBLOCK_VER_PATCH;
 
   return ver;
 }

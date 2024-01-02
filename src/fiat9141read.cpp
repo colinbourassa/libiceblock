@@ -9,9 +9,9 @@
 int main(int argc, char** argv)
 {
   int status = 0;
-  const BlockProtocolLibraryVersion ver = getLibraryVersion();
+  const IceblockVersion ver = getIceblockVersion();
 
-  printf("fiat9141read using libkwp71 v%d.%d.%d\n",
+  printf("fiat9141read using libiceblock v%d.%d.%d\n",
     ver.major, ver.minor, ver.patch);
 
   Fiat9141 fiat(true);

@@ -1,21 +1,21 @@
 cmake_minimum_required (VERSION 3.0)
-project (libkwp71 LANGUAGES CXX)
+project (libiceblock LANGUAGES CXX)
 include (GNUInstallDirs)
 
-set(PROJECT_NAME "libkwp71")
+set(PROJECT_NAME "libiceblock")
 set(PROJECT_DESCRIPTION "Library supporting serial communication with ECUs that speak the KP-71 / KWP-71 protocol")
 set(PROJECT_AUTHOR "Colin Bourassa <colin.bourassa@gmail.com>")
 set(PROJECT_URL "https://github.com/colinbourassa/libkwp71")
 
-set (KWP71_VER_MAJOR 1)
-set (KWP71_VER_MINOR 0)
-set (KWP71_VER_PATCH 0)
-set (KWP71_VERSION "${KWP71_VER_MAJOR}.${KWP71_VER_MINOR}.${KWP71_VER_PATCH}")
+set (ICEBLOCK_VER_MAJOR 1)
+set (ICEBLOCK_VER_MINOR 0)
+set (ICEBLOCK_VER_PATCH 0)
+set (ICEBLOCK_VERSION "${ICEBLOCK_VER_MAJOR}.${ICEBLOCK_VER_MINOR}.${ICEBLOCK_VER_PATCH}")
 
 set (SOURCE_SUBDIR "${CMAKE_SOURCE_DIR}/src")
 
 set (CPACK_SOURCE_GENERATOR "TGZ")
-set (CPACK_SOURCE_PACKAGE_FILE_NAME "${PROJECT_NAME}-${KWP71_VERSION}")
+set (CPACK_SOURCE_PACKAGE_FILE_NAME "${PROJECT_NAME}-${ICEBLOCK_VERSION}")
 set (CPACK_SOURCE_IGNORE_FILES
       ".*deb$"
       ".*zip$"
@@ -34,7 +34,7 @@ set (CPACK_SOURCE_IGNORE_FILES
       "cmake_install.cmake"
       "install_manifest.txt"
       "Makefile"
-      "kwp71_version.h$"
+      "iceblock_version.h$"
       "build/"
       "build-win32")
 
@@ -50,8 +50,8 @@ if (NOT LIBRARY_USB_FOUND)
   message(FATAL_ERROR "LibUSB 1.0 required to build.")
 endif()
 
-configure_file ("${SOURCE_SUBDIR}/kwp71_version.h.in"
-                "${CMAKE_BINARY_DIR}/kwp71_version.h")
+configure_file ("${SOURCE_SUBDIR}/iceblock_version.h.in"
+                "${CMAKE_BINARY_DIR}/iceblock_version.h")
 
 include_directories ("${CMAKE_SOURCE_DIR}/src" "${CMAKE_BINARY_DIR}" "${LIBRARY_USB_INCLUDE_DIRS}")
 
@@ -67,12 +67,12 @@ set (ALL_SOURCE_FILES
     )
 
 if (BUILD_STATIC STREQUAL "ON")
-  add_library (kwp71 STATIC ${ALL_SOURCE_FILES})
+  add_library (iceblock STATIC ${ALL_SOURCE_FILES})
 else()
-  add_library (kwp71 SHARED ${ALL_SOURCE_FILES})
+  add_library (iceblock SHARED ${ALL_SOURCE_FILES})
 endif()
 
-target_link_libraries (kwp71 usb-1.0 ftdi1)
+target_link_libraries (iceblock usb-1.0 ftdi1)
 
 add_executable (kwp71read ${SOURCE_SUBDIR}/kwp71read.cpp)
 add_executable (fiat9141read ${SOURCE_SUBDIR}/fiat9141read.cpp)
@@ -90,14 +90,14 @@ if (MINGW OR WIN32)
   configure_file ("${CMAKE_SOURCE_DIR}/LICENSE" "${CMAKE_BINARY_DIR}/LICENSE.TXT" NEWLINE_STYLE WIN32)
 
   set_target_properties (
-    kwp71
+    iceblock
       PROPERTIES
-        SOVERSION ${KWP71_VER_MAJOR}
-        VERSION   ${KWP71_VER_MAJOR}
+        SOVERSION ${ICEBLOCK_VER_MAJOR}
+        VERSION   ${ICEBLOCK_VER_MAJOR}
   )
 
-  target_link_libraries (kwp71read kwp71)
-  target_link_libraries (fiat9141read kwp71)
+  target_link_libraries (kwp71read iceblock)
+  target_link_libraries (fiat9141read iceblock)
 
   # MXE requires that documentation and test applications not be installed
   # by default, so we provide a couple env vars to control this
@@ -114,9 +114,9 @@ if (MINGW OR WIN32)
   set (CPACK_PACKAGE_NAME ${PROJECT_NAME})
   set (CPACK_INCLUDE_TOPLEVEL_DIRECTORY 0)
   if ("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "")
-    set (CPACK_PACKAGE_FILE_NAME "${PROJECT_NAME}-${KWP71_VERSION}-${CMAKE_SYSTEM_NAME}")
+    set (CPACK_PACKAGE_FILE_NAME "${PROJECT_NAME}-${ICEBLOCK_VERSION}-${CMAKE_SYSTEM_NAME}")
   else()
-    set (CPACK_PACKAGE_FILE_NAME "${PROJECT_NAME}-${KWP71_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
+    set (CPACK_PACKAGE_FILE_NAME "${PROJECT_NAME}-${ICEBLOCK_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
   endif()
   include (CPack)
 
@@ -148,14 +148,14 @@ else()
   set (CMAKE_SKIP_RPATH TRUE)
 
   set_target_properties (
-    kwp71
+    iceblock
       PROPERTIES
-        SOVERSION ${KWP71_VER_MAJOR}
-        VERSION   ${KWP71_VERSION}
+        SOVERSION ${ICEBLOCK_VER_MAJOR}
+        VERSION   ${ICEBLOCK_VERSION}
   )
 
-  target_link_libraries (kwp71read kwp71)
-  target_link_libraries (fiat9141read kwp71)
+  target_link_libraries (kwp71read iceblock)
+  target_link_libraries (fiat9141read iceblock)
 
   if (ENABLE_DOC_INSTALL)
     install (DIRECTORY DESTINATION "${CMAKE_INSTALL_DOCDIR}" DIRECTORY_PERMISSIONS
@@ -196,15 +196,15 @@ else()
 
     set (CPACK_GENERATOR "DEB")
     set (CPACK_PACKAGE_NAME ${PROJECT_NAME})
-    set (CPACK_PACKAGE_VERSION_MAJOR ${KWP71_VER_MAJOR})
-    set (CPACK_PACKAGE_VERSION_MINOR ${KWP71_VER_MINOR})
-    set (CPACK_PACKAGE_VERSION_PATCH ${KWP71_VER_PATCH})
+    set (CPACK_PACKAGE_VERSION_MAJOR ${ICEBLOCK_VER_MAJOR})
+    set (CPACK_PACKAGE_VERSION_MINOR ${ICEBLOCK_VER_MINOR})
+    set (CPACK_PACKAGE_VERSION_PATCH ${ICEBLOCK_VER_PATCH})
     set (CPACK_DEBIAN_PACKAGE_NAME ${CPACK_PACKAGE_NAME})
     set (CPACK_DEBIAN_PACKAGE_MAINTAINER "${PROJECT_AUTHOR}")
     set (CPACK_DEBIAN_PACKAGE_SECTION "Libraries")
     set (CPACK_DEBIAN_PACKAGE_DEPENDS "libc6 (>= 2.13)")
     set (CPACK_PACKAGE_DESCRIPTION_SUMMARY "${PROJECT_DESCRIPTION}")
-    set (CPACK_PACKAGE_FILE_NAME "${PROJECT_NAME}-${KWP71_VERSION}-${CMAKE_SYSTEM_NAME}-${CPACK_DEBIAN_PACKAGE_ARCHITECTURE}")
+    set (CPACK_PACKAGE_FILE_NAME "${PROJECT_NAME}-${ICEBLOCK_VERSION}-${CMAKE_SYSTEM_NAME}-${CPACK_DEBIAN_PACKAGE_ARCHITECTURE}")
     set (CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE")
     set (CPACK_RESOURCE_FILE_README "${CMAKE_SOURCE_DIR}/README.md")
     include(CPack)
@@ -215,8 +215,9 @@ endif()
 #
 # install the public headers
 #
-install (FILES "${SOURCE_SUBDIR}/kwp71.h"
-               "${CMAKE_BINARY_DIR}/kwp71_version.h"
+install (FILES "${SOURCE_SUBDIR}/KWP71.h"
+               "${SOURCE_SUBDIR}/Fiat9141.h"
+               "${CMAKE_BINARY_DIR}/iceblock_version.h"
          DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
          PERMISSIONS
           OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ)
@@ -224,17 +225,17 @@ install (FILES "${SOURCE_SUBDIR}/kwp71.h"
 #
 # install the library
 #
-install (TARGETS kwp71
+install (TARGETS iceblock
          LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}")
 
 #
 # install the pkgconfig file
 #
 if (ENABLE_PKGCONFIG_INSTALL)
-  set (LIBKWP71_PC "${CMAKE_BINARY_DIR}/libkwp71.pc")
-  configure_file ("${CMAKE_SOURCE_DIR}/libkwp71.pc.cmakein" ${LIBKWP71_PC} @ONLY)
+  set (LIBICEBLOCK_PC "${CMAKE_BINARY_DIR}/libiceblock.pc")
+  configure_file ("${CMAKE_SOURCE_DIR}/libiceblock.pc.cmakein" ${LIBICEBLOCK_PC} @ONLY)
 
-  install (FILES "${LIBKWP71_PC}"
+  install (FILES "${LIBICEBLOCK_PC}"
            DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig"
            PERMISSIONS
             OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ)

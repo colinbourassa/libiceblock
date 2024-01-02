@@ -8,7 +8,6 @@
 #include <condition_variable>
 #include <stdint.h>
 #include <libftdi1/ftdi.h>
-#include "kwp71_version.h"
 
 struct FtdiDeviceInfo
 {

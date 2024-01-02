@@ -1,29 +1,16 @@
-.TH LIBTORINO 3
-.SH libkwp71
-libkwp71 - Serial interface library for ECUs that speak the KWP-71 / KP-71 protocol
+.TH LIBICEBLOCK 3
+.SH libiceblock
+libiceblock - Serial interface library for ECUs that speak the KWP-71 and FIAT-9141 protocols
 
 .SH SYNOPSIS
-.B #include <kwp71.h>
+.B #include <KWP71.h>
+.B #include <Fiat9141.h>
 
 .SH NOTES
 This library requires a compatible serial device. It must follow the K-line signal standard (used by a number of ISO9141-based protocols), and also be driven by an FTDI USB-to-serial interface. The FTDI requirement is because of the need to use bit-banging to create 5 baud traffic for the slow init sequence.
 
 .SH DESCRIPTION
 This library provides an interface to the diagnostic serial port on a number of different automotive ECUs used during the 1990s.
-
-.SH EXAMPLE
-kwp71_info info;
-.br
-kwp71_ecuinfo ecuinfo;
-.br
-kwp71_init(&info);
-.br
-.nf
-if (kwp71_connect(&info, "/dev/ttyUSB0", &ecuinfo))
-{
-}
-.br
-kwp71_cleanup(&info);
 
 .SH AUTHOR
 Colin Bourassa <colin.bourassa@gmail.com>

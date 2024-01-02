@@ -3,10 +3,10 @@ exec_prefix=@CMAKE_INSTALL_PREFIX@
 libdir=${exec_prefix}/@CMAKE_INSTALL_LIBDIR@
 includedir=${exec_prefix}/@CMAKE_INSTALL_INCLUDEDIR@
 
-Name: libkwp71
-Description: libkwp71 engine management diagnosic library
-Version: @KWP71_VERSION@
+Name: libiceblock
+Description: libiceblock ECU diagnosic protocol library
+Version: @ICEBLOCK_VERSION@
 
 Requires: libftdi1
-Libs: -L${libdir} -lkwp71
+Libs: -L${libdir} -liceblock
 Cflags: -I${includedir}

@@ -1,11 +1,11 @@
 #include <cstdint>
 
-struct BlockProtocolLibraryVersion
+struct IceblockVersion
 {
   uint8_t major;
   uint8_t minor;
   uint8_t patch;
 };
 
-BlockProtocolLibraryVersion getLibraryVersion();
+IceblockVersion getIceblockVersion();
 

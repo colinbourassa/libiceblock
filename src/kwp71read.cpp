@@ -9,9 +9,9 @@
 int main(int argc, char** argv)
 {
   int status = 0;
-  const BlockProtocolLibraryVersion ver = getLibraryVersion();
+  const IceblockVersion ver = getIceblockVersion();
 
-  printf("kwp71read using libkwp71 v%d.%d.%d\n",
+  printf("kwp71read using libiceblock v%d.%d.%d\n",
     ver.major, ver.minor, ver.patch);
 
   KWP71 kwp(true);
