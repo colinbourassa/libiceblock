@@ -45,7 +45,7 @@ enum class BlockTrailerType
 class BlockExchangeProtocol
 {
 public:
-  BlockExchangeProtocol(int baudRate, bool verbose);
+  explicit BlockExchangeProtocol(int baudRate, bool verbose);
   virtual ~BlockExchangeProtocol();
 
   bool connectByDeviceId(uint16_t vid, uint16_t pid, uint8_t ecuAddr);

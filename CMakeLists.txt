@@ -39,7 +39,7 @@ set (CPACK_SOURCE_IGNORE_FILES
       "build-win32")
 
 option (ENABLE_DOC_INSTALL "Enables installation of documentation (README, LICENSE, manpage) to the appropriate locations" OFF)
-option (ENABLE_TESTAPP_INSTALL "Enables installation of the kwp71read/fiat9141read utilities" OFF)
+option (ENABLE_TESTAPP_INSTALL "Enables installation of the test/read utilities" OFF)
 option (ENABLE_PKGCONFIG_INSTALL "Enables installation of a pkgconfig configuration file" ON)
 
 find_package (LibFTDI1 CONFIG REQUIRED)
@@ -64,6 +64,8 @@ set (ALL_SOURCE_FILES
        "${SOURCE_SUBDIR}/KWP71.h"
        "${SOURCE_SUBDIR}/library_info.cpp"
        "${SOURCE_SUBDIR}/library_info.h"
+       "${SOURCE_SUBDIR}/Marelli1AF.cpp"
+       "${SOURCE_SUBDIR}/Marelli1AF.h"
     )
 
 if (BUILD_STATIC STREQUAL "ON")
@@ -76,6 +78,7 @@ target_link_libraries (iceblock usb-1.0 ftdi1)
 
 add_executable (kwp71read ${SOURCE_SUBDIR}/kwp71read.cpp)
 add_executable (fiat9141read ${SOURCE_SUBDIR}/fiat9141read.cpp)
+add_executable (marelli1afread ${SOURCE_SUBDIR}/marelli1afread.cpp)
 
 if (MINGW OR WIN32)
 
@@ -98,6 +101,7 @@ if (MINGW OR WIN32)
 
   target_link_libraries (kwp71read iceblock)
   target_link_libraries (fiat9141read iceblock)
+  target_link_libraries (marelli1afread iceblock)
 
   # MXE requires that documentation and test applications not be installed
   # by default, so we provide a couple env vars to control this
@@ -156,6 +160,7 @@ else()
 
   target_link_libraries (kwp71read iceblock)
   target_link_libraries (fiat9141read iceblock)
+  target_link_libraries (marelli1afread iceblock)
 
   if (ENABLE_DOC_INSTALL)
     install (DIRECTORY DESTINATION "${CMAKE_INSTALL_DOCDIR}" DIRECTORY_PERMISSIONS
@@ -247,7 +252,7 @@ endif()
 # install the test applications
 #
 if (ENABLE_TESTAPP_INSTALL)
-  install (TARGETS kwp71read fiat9141read
+  install (TARGETS kwp71read fiat9141read marelli1afread
            RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
 else()
   message (STATUS "Skipping installation of test application.")

@@ -33,11 +33,10 @@ enum class KWP71BlockType
 class KWP71 : public BlockExchangeProtocol
 {
 public:
-  KWP71(bool verbose);
-  KWP71(int baudRate, bool verbose);
+  explicit KWP71(bool verbose);
+  explicit KWP71(int baudRate, bool verbose);
 
   bool activateActuator(uint8_t index);
-
   bool readRAM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data);
   bool readROM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data);
   bool readEEPROM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data);

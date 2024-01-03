@@ -614,10 +614,12 @@ bool BlockExchangeProtocol::waitForISOSequence(std::chrono::milliseconds timeout
  */
 bool BlockExchangeProtocol::readAckKeywordBytes()
 {
-  bool status = false;
   std::vector<uint8_t> isoBytes;
-  
-  if (waitForISOSequence(std::chrono::milliseconds(1500), isoBytes))
+  bool status = waitForISOSequence(std::chrono::milliseconds(1500), isoBytes);
+
+  // If the keyword sequence was successfully received AND there is a valid
+  // index of the byte to echo...
+  if (status && (isoKeywordIndexToEcho() >= 0))
   {
     // check that the ISO keyword sequence is long enough to
     // contain the index of the byte that we need to echo
