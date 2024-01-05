@@ -53,14 +53,14 @@ protected:
   virtual inline int isoKeywordIndexToEcho() const override { return 2; }
   virtual inline bool isoKeywordEchoIsInverted() const override { return true; }
   virtual inline int isoKeywordNumBytes() const override { return 3; }
-  virtual inline bool useSequenceNums() const { return true; }
-  virtual inline BlockTrailerType trailerType() const { return BlockTrailerType::Fixed03; }
-  virtual inline uint8_t blockTitleForEmptyAck() const { return static_cast<uint8_t>(KWP71BlockType::Empty); }
-  virtual inline uint8_t blockTitleForRequestID() const { return static_cast<uint8_t>(KWP71BlockType::RequestID); }
+  virtual inline bool useSequenceNums() const override { return true; }
+  virtual inline BlockTrailerType trailerType() const override { return BlockTrailerType::Fixed03; }
+  virtual inline uint8_t blockTitleForEmptyAck() const override { return static_cast<uint8_t>(KWP71BlockType::Empty); }
+  virtual inline uint8_t blockTitleForRequestID() const override { return static_cast<uint8_t>(KWP71BlockType::RequestID); }
+  virtual bool lastReceivedBlockWasEmpty() const override;
+  virtual bool lastReceivedBlockWasNack() const override;
 
   virtual bool doPostKeywordSequence();
-  virtual bool lastReceivedBlockWasEmpty() const;
-  virtual bool lastReceivedBlockWasNack() const;
   virtual void processReceivedBlock();
   virtual bool isValidCommandFromTester(uint8_t type) const override;
   virtual bool checkValidityOfBlockAndPayload(uint8_t title, const std::vector<uint8_t>& payload) const override;
