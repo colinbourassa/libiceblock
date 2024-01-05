@@ -266,7 +266,8 @@ void BlockExchangeProtocol::setBlockTrailer()
     {
       checksum16 += m_sendBlockBuf[i];
     }
-    // TODO: set trailer bytes
+    m_sendBlockBuf[m_sendBlockBuf[0] - 1] = static_cast<uint8_t>(checksum16 >> 8);
+    m_sendBlockBuf[m_sendBlockBuf[0]] = static_cast<uint8_t>(checksum16 & 0xff);
   }
 }
 
@@ -277,7 +278,7 @@ void BlockExchangeProtocol::setBlockTrailer()
  * exception of the last byte, which is not echoed.)
  * Returns true if the entire block was sent successfuly; false otherwise.
  */
-bool BlockExchangeProtocol::sendBlock()
+bool BlockExchangeProtocol::sendBlock(bool sendBufIsPrepopulated)
 {
   bool status = true;
   uint8_t index = 0;
@@ -286,7 +287,10 @@ bool BlockExchangeProtocol::sendBlock()
   uint8_t ackCompare = 0;
   bool usedPendingCommand = false;
 
-  populateBlock(usedPendingCommand);
+  if (!sendBufIsPrepopulated)
+  {
+    populateBlock(usedPendingCommand);
+  }
 
   if (m_verbose)
   {
@@ -342,7 +346,7 @@ bool BlockExchangeProtocol::sendBlock()
  * last) is positively acknowledged with its bitwise inversion. Returns true if
  * all the expected bytes are received, false otherwise.
  */
-bool BlockExchangeProtocol::recvBlock()
+bool BlockExchangeProtocol::recvBlock(std::chrono::milliseconds timeout)
 {
   bool status = true;
   uint16_t index = 1;
@@ -354,7 +358,7 @@ bool BlockExchangeProtocol::recvBlock()
     printf("recv: ");
   }
 
-  if (readSerial(&m_recvBlockBuf[0], 1))
+  if (readSerial(&m_recvBlockBuf[0], 1, timeout))
   {
     if (m_verbose)
     {
@@ -449,7 +453,9 @@ bool BlockExchangeProtocol::setFtdiSerialProperties()
  * Reads bytes from the FTDI's receive FIFO until the specified number have been
  * received or a timeout expires.
  */
-bool BlockExchangeProtocol::readSerial(uint8_t* buf, int count)
+bool BlockExchangeProtocol::readSerial(uint8_t* buf,
+                                       int count,
+                                       std::chrono::milliseconds timeout)
 {
   int readCount = 0;
   int status = 0;
@@ -464,7 +470,7 @@ bool BlockExchangeProtocol::readSerial(uint8_t* buf, int count)
     }
   } while ((readCount < count) &&
            (status != -666) &&
-           ((std::chrono::steady_clock::now() - start) < std::chrono::milliseconds(1000)));
+           ((std::chrono::steady_clock::now() - start) < timeout));
   
   return (readCount == count);
 }
@@ -648,26 +654,15 @@ bool BlockExchangeProtocol::readAckKeywordBytes()
  */
 bool BlockExchangeProtocol::requestIDInfo(std::vector<std::string>& idResponse)
 {
-  // wait until any previous command has been fully processed
-  std::unique_lock<std::mutex> lock(m_commandMutex);
+  std::vector<uint8_t> responseData;
+  CommandBlock cmd;
+  cmd.type = blockTitleForRequestID();
+  cmd.payload = {};
+  const bool status = sendCommand(cmd, responseData);
 
-  m_pendingCmd.type = blockTitleForRequestID();
-  m_pendingCmd.payload = std::vector<uint8_t>();
-  m_commandIsPending = true;
+  // TODO: parse the byte array payload into strings
 
-  // wait until the response from this command has been completely received
-  {
-    std::unique_lock<std::mutex> responseLock(m_responseMutex);
-    m_responseCondVar.wait(responseLock);
-  }
-
-  if (m_responseReadSuccess)
-  {
-    idResponse = m_responseStringData;
-    m_responseStringData.clear();
-  }
-
-  return m_responseReadSuccess;
+  return status;
 }
 
 /**
@@ -696,11 +691,40 @@ bool BlockExchangeProtocol::sendCommand(CommandBlock cmd, std::vector<uint8_t>& 
 
   if (m_responseReadSuccess)
   {
-    response = m_responseBinaryData;
-    m_responseBinaryData.clear();
+    response = m_lastReceivedPayload;
+    m_lastReceivedPayload.clear();
   }
 
   return m_responseReadSuccess;
+}
+
+/**
+ * Captures the data from the payload of the block that was most
+ * recently received.
+ */
+void BlockExchangeProtocol::processReceivedBlock()
+{
+  int payloadLen = 0;
+  int blockPayloadStartPos = 0;
+
+  if (useSequenceNums())
+  {
+    m_lastUsedSeqNum = m_recvBlockBuf[1];
+    m_lastReceivedBlockTitle = m_recvBlockBuf[2];
+    payloadLen = m_recvBlockBuf[0] - 3;
+    blockPayloadStartPos = 3;
+  }
+  else
+  {
+    m_lastReceivedBlockTitle = m_recvBlockBuf[1];
+    payloadLen = m_recvBlockBuf[0] - 2;
+    blockPayloadStartPos = 2;
+  }
+
+  // if (shouldCapturePayloadFromBlock())
+  m_lastReceivedPayload.insert(m_lastReceivedPayload.end(),
+                               &m_recvBlockBuf[blockPayloadStartPos],
+                               &m_recvBlockBuf[blockPayloadStartPos + payloadLen]);
 }
 
 /**

@@ -76,16 +76,16 @@ protected:
   uint8_t m_sendBlockBuf[256];
   uint8_t m_recvBlockBuf[256];
   uint8_t m_lastUsedSeqNum = 0;
-  std::vector<uint8_t> m_responseBinaryData;
-  std::vector<std::string> m_responseStringData;
+  uint8_t m_lastReceivedBlockTitle = 0;
+  std::vector<uint8_t> m_lastReceivedPayload;
 
-  bool recvBlock();
-  bool sendBlock();
+  bool recvBlock(std::chrono::milliseconds timeout = std::chrono::milliseconds(1000));
+  bool sendBlock(bool sendBufIsPrepopulated = false);
   inline bool shutdownRequested() const { return m_shutdown; }
+  void processReceivedBlock();
 
   virtual bool isValidCommandFromTester(uint8_t type) const { return true; }
   virtual bool checkValidityOfBlockAndPayload(uint8_t title, const std::vector<uint8_t>& payload) const = 0;
-  virtual void processReceivedBlock() = 0;
   virtual bool doPostKeywordSequence() { return true; }
 
 private:
@@ -124,7 +124,7 @@ private:
   void commLoop();
   static void threadEntry(BlockExchangeProtocol* iface);
 
-  bool readSerial(uint8_t* buf, int count);
+  bool readSerial(uint8_t* buf, int count, std::chrono::milliseconds = std::chrono::milliseconds(1000));
   bool writeSerial(uint8_t* buf, int count);
 
   int getFtdiDeviceInfo(ftdi_device_list* list, int count, std::vector<FtdiDeviceInfo>& deviceInfo);

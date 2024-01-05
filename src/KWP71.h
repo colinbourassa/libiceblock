@@ -1,6 +1,7 @@
 #include "BlockExchangeProtocol.h"
+#include <cstdint>
 
-enum class KWP71BlockType
+enum class KWP71BlockType : uint8_t
 {
   RequestID         = 0x00,
   ReadRAM           = 0x01,
@@ -27,7 +28,7 @@ enum class KWP71BlockType
   ADCValue          = 0xFB,
   BinaryData        = 0xFC,
   RAMContent        = 0xFD,
-  ROMContent        = 0xFE,
+  ROMContent        = 0xFE
 };
 
 class KWP71 : public BlockExchangeProtocol
@@ -60,14 +61,8 @@ protected:
   virtual bool lastReceivedBlockWasEmpty() const override;
   virtual bool lastReceivedBlockWasNack() const override;
 
-  virtual bool doPostKeywordSequence();
-  virtual void processReceivedBlock();
+  virtual bool doPostKeywordSequence() override;
   virtual bool isValidCommandFromTester(uint8_t type) const override;
   virtual bool checkValidityOfBlockAndPayload(uint8_t title, const std::vector<uint8_t>& payload) const override;
-
-private:
-  KWP71BlockType m_lastReceivedBlockType = KWP71BlockType::Empty;
-
-  bool populateBlock(bool& usedPendingCommand);
 };
 

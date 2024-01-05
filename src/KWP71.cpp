@@ -10,7 +10,6 @@ KWP71::KWP71(int baudRate, bool verbose) :
 {
 }
 
-
 bool KWP71::doPostKeywordSequence()
 {
   bool status = true;
@@ -19,7 +18,7 @@ bool KWP71::doPostKeywordSequence()
     if (recvBlock())
     {
       // ACK until the ECU sends its first empty block (after the ID info)
-      if (m_lastReceivedBlockType != KWP71BlockType::Empty)
+      if (m_lastReceivedBlockTitle != static_cast<uint8_t>(KWP71BlockType::Empty))
       {
         sendBlock();
       }
@@ -28,68 +27,21 @@ bool KWP71::doPostKeywordSequence()
     {
       status = false;
     }
-  } while ((m_lastReceivedBlockType != KWP71BlockType::Empty) && !shutdownRequested());
+  } while ((m_lastReceivedBlockTitle != static_cast<uint8_t>(KWP71BlockType::Empty)) &&
+           !shutdownRequested());
 
   return status;
 }
 
 bool KWP71::lastReceivedBlockWasEmpty() const
 {
-  return (m_lastReceivedBlockType == KWP71BlockType::Empty);
+  return (m_lastReceivedBlockTitle == static_cast<uint8_t>(KWP71BlockType::Empty));
 }
 
 bool KWP71::lastReceivedBlockWasNack() const
 {
-  return ((m_lastReceivedBlockType == KWP71BlockType::NACK) ||
-          (m_lastReceivedBlockType == KWP71BlockType::NotSupported));
-}
-
-/**
- * Parses the data in the received block buffer and takes the appropriate
- * action to package and return the data.
- */
-void KWP71::processReceivedBlock()
-{
-  int payloadLen = 0;
-  int blockPayloadStartPos = 0;
-
-  if (useSequenceNums())
-  {
-    m_lastUsedSeqNum = m_recvBlockBuf[1];
-    m_lastReceivedBlockType = (KWP71BlockType)(m_recvBlockBuf[2]);
-    payloadLen = m_recvBlockBuf[0] - 3;
-    blockPayloadStartPos = 3;
-  }
-  else
-  {
-    m_lastReceivedBlockType = (KWP71BlockType)(m_recvBlockBuf[1]);
-    payloadLen = m_recvBlockBuf[0] - 2;
-    blockPayloadStartPos = 2;
-  }
-
-  switch (m_lastReceivedBlockType)
-  {
-  // TODO: what action is required for these two block types?
-  case KWP71BlockType::ParamRecordConf:
-  case KWP71BlockType::Snapshot:
-    break;
-  case KWP71BlockType::ASCIIString:
-    m_responseStringData.push_back(std::string(m_recvBlockBuf[blockPayloadStartPos], payloadLen));
-    break;
-  case KWP71BlockType::ADCValue:
-  case KWP71BlockType::BinaryData:
-  case KWP71BlockType::RAMContent:
-  case KWP71BlockType::ROMContent:
-  case KWP71BlockType::EEPROMContent:
-  case KWP71BlockType::ParametricData:
-    // capture just the payload data of the block (i.e. the bytes
-    // *after* the length, seq. num (if used), and block title,
-    // and *before* the 0x03 end-of-block marker (or checksum)
-    m_responseBinaryData.insert(m_responseBinaryData.end(),
-                                &m_recvBlockBuf[blockPayloadStartPos],
-                                &m_recvBlockBuf[blockPayloadStartPos + payloadLen]);
-    break;
-  }
+  return ((m_lastReceivedBlockTitle == static_cast<uint8_t>(KWP71BlockType::NACK)) ||
+          (m_lastReceivedBlockTitle == static_cast<uint8_t>(KWP71BlockType::NotSupported)));
 }
 
 /**

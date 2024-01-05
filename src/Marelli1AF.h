@@ -1,6 +1,6 @@
 #include "BlockExchangeProtocol.h"
 
-enum class Marelli1AFBlockType
+enum class Marelli1AFBlockType : uint8_t
 {
   // Special blocks used only during post-init sequence
   HostBlock         = 0x00,
@@ -60,10 +60,12 @@ protected:
 
   virtual bool isValidCommandFromTester(uint8_t type) const override;
   virtual bool checkValidityOfBlockAndPayload(uint8_t title, const std::vector<uint8_t>& payload) const override;
-  virtual void processReceivedBlock() override = 0;
-  virtual bool doPostKeywordSequence() override = 0;
+  virtual bool doPostKeywordSequence() override;
 
 private:
-  Marelli1AFBlockType m_lastReceivedBlockType = Marelli1AFBlockType::EmptyAck;
+  bool sendSelectBlock();
+  bool waitForSelectBlockResponse();
+  bool sendHostBlock();
+  bool waitForHostBlockResponse();
 };
 
