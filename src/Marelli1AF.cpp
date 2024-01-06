@@ -95,7 +95,7 @@ bool Marelli1AF::doPostKeywordSequence()
 {
   int attemptsRemaining = 3;
   bool status = true;
-
+  // TODO: add appropriate delays per the spec
   do {
     sendSelectBlock();
     status = waitForSelectBlockResponse();
