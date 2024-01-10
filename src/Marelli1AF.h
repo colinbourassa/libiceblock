@@ -4,7 +4,7 @@ enum class Marelli1AFBlockType : uint8_t
 {
   // Special blocks used only during post-init sequence
   HostBlock         = 0x00,
-  HostBlockResponse = 0x0D,
+  OutStatus         = 0x0D, // ACK for HostBlock
   SelectBlock       = 0x34,
   SelectBlockNACK   = 0x38,
 
@@ -38,6 +38,11 @@ enum class Marelli1AFBlockType : uint8_t
   CheckActuatorError      = 0xDD
 };
 
+/**
+ * A block exchange protocol that has different block titles than KWP-71 or
+ * FIAT-9141, and also requires a particular exchange of special blocks
+ * immediately after the initialization sequence.
+ */
 class Marelli1AF : public BlockExchangeProtocol
 {
 public:
