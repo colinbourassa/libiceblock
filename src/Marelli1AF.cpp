@@ -42,8 +42,38 @@ bool Marelli1AF::isValidCommandFromTester(uint8_t title) const
 
 bool Marelli1AF::checkValidityOfBlockAndPayload(uint8_t title, const std::vector<uint8_t>& payload) const
 {
-  // TODO
-  return false;
+  bool status = false;
+  const Marelli1AFBlockType type = static_cast<Marelli1AFBlockType>(title);
+  switch(type)
+  {
+  case Marelli1AFBlockType::WriteRAM:
+    status = (payload.size() == 6);
+    break;
+  case Marelli1AFBlockType::ReadMemoryCell:
+    status = (payload.size() == 3);
+    break;
+  case Marelli1AFBlockType::ActivateActuator:
+    status = (payload.size() == 2);
+    break;
+  case Marelli1AFBlockType::ReadIDCode:
+  case Marelli1AFBlockType::StopActuator:
+  case Marelli1AFBlockType::ReadValue:
+  case Marelli1AFBlockType::ReadSnapshot:
+  case Marelli1AFBlockType::ReadErrorValue:
+    status = (payload.size() == 1);
+    break;
+  case Marelli1AFBlockType::ReadErrorMemory:
+  case Marelli1AFBlockType::ClearErrorMemory:
+    status = payload.empty();
+    break;
+  case Marelli1AFBlockType::ReadADCChannel:
+    // Not sure if there's a maximum on the number of ADC channels that can be
+    // requested in a single message; for now, we'll just let anything through.
+    status = true;
+  default:
+    break;
+  }
+  return status;
 }
 
 bool Marelli1AF::lastReceivedBlockWasEmpty() const
@@ -239,19 +269,50 @@ bool Marelli1AF::readADCChannel(const std::vector<uint8_t>& channelList,
 
 bool Marelli1AF::writeSecurityCode(const std::vector<uint8_t>& securityCode)
 {
-  std::vector<uint8_t> response;
-  CommandBlock cmd;
-  cmd.type = static_cast<uint8_t>(Marelli1AFBlockType::WriteRAM);
-  cmd.payload = securityCode;
-  cmd.payload.insert(cmd.payload.begin(), {0x0b});
-  const bool status = sendCommand(cmd, response);
+  bool status = false;
+  if (securityCode.size() == 5)
+  {
+    std::vector<uint8_t> response;
+    CommandBlock cmd;
+    cmd.type = static_cast<uint8_t>(Marelli1AFBlockType::WriteRAM);
+    cmd.payload = securityCode;
+    cmd.payload.insert(cmd.payload.begin(), {0x0b});
+    status = sendCommand(cmd, response);
+  }
   return status;
 }
 
 bool Marelli1AF::readErrorMemory(std::vector<uint8_t>& data)
 {
   CommandBlock cmd;
-  cmd.type = static_cast<uint8_t>(Marelli1AFBlockType::ReadMemoryCell);
+  cmd.type = static_cast<uint8_t>(Marelli1AFBlockType::ReadErrorMemory);
+  const bool status = sendCommand(cmd, data);
+  return status;
+}
+
+bool Marelli1AF::readIDCode(Marelli1AFPartNumberType type, std::vector<uint8_t>& idString)
+{
+  CommandBlock cmd;
+  cmd.type = static_cast<uint8_t>(Marelli1AFBlockType::ReadIDCode);
+  cmd.payload.push_back(static_cast<uint8_t>(type));
+  const bool status = sendCommand(cmd, idString);
+  return status;
+}
+
+bool Marelli1AF::readErrorValue(uint8_t code, std::vector<uint8_t>& data)
+{
+  CommandBlock cmd;
+  cmd.type = static_cast<uint8_t>(Marelli1AFBlockType::ReadErrorValue);
+  cmd.payload.push_back(code);
+  const bool status = sendCommand(cmd, data);
+  return status;
+}
+
+bool Marelli1AF::clearErrorMemory()
+{
+  std::vector<uint8_t> data;
+  CommandBlock cmd;
+  cmd.type = static_cast<uint8_t>(Marelli1AFBlockType::ClearErrorMemory);
   const bool status = sendCommand(cmd, data);
   return status;
 }

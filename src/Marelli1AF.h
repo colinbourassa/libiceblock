@@ -38,17 +38,24 @@ enum class Marelli1AFBlockType : uint8_t
   CheckActuatorError      = 0xDD
 };
 
+enum class Marelli1AFPartNumberType : uint8_t
+{
+  MarelliBolognaDrawingNumber = 0,
+  HWSWNumber = 1,
+  FIATDrawingNumber = 2
+};
+
 /**
  * Marelli's 1AF diagnostic protocol is of the block-exchange type, but it has
  * different block titles than KWP-71 or FIAT-9141, and also requires a
  * particular exchange of special blocks immediately after the initialization
  * sequence.
  *
- * This protocol is designed specifically for four-cylinder engine ECU
- * diagnostics, as evidenced by several data structures in its specification.
- * However, the 1AF protocol (or a close relative) also appears to have been
- * used for the Marelli F1 gearbox controller on the Ferrari 355 F1. Some of the
- * protocol's engine-specific features must be unsupported in this configuration.
+ * Based on its spec (FIAT document 3.00601), this protocol seems to have been
+ * designed specifically for four-cylinder engine ECU diagnostics. However, this
+ * protocol (or a close relative) also appears to have been used for the Marelli
+ * F1 gearbox controller on the Ferrari 355 F1. Some of the protocol's engine-
+ * specific features must be unsupported in this configuration.
  */
 class Marelli1AF : public BlockExchangeProtocol
 {
@@ -65,6 +72,9 @@ public:
                       std::vector<uint8_t>& channelValues);
   bool writeSecurityCode(const std::vector<uint8_t>& securityCode);
   bool readErrorMemory(std::vector<uint8_t>& data);
+  bool readIDCode(Marelli1AFPartNumberType type, std::vector<uint8_t>& idString);
+  bool readErrorValue(uint8_t code, std::vector<uint8_t>& data);
+  bool clearErrorMemory();
 
 protected:
   virtual bool bytesEchoedDuringBlockReceipt() const override { return false; }
