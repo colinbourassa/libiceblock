@@ -16,12 +16,12 @@ public:
   Fiat9141(bool verbose);
 
 protected:
-  virtual inline bool bytesEchoedDuringBlockReceipt() const override { return false; }
-  virtual inline int initDataBits() const override { return 7; }
-  virtual inline int initParity() const override { return 1; }
-  virtual inline int timeBeforeReconnectMs() const override { return 2050; }
-  virtual inline int isoKeywordNumBytes() const override { return 6; };
-  virtual inline bool useSequenceNums() const override { return false; }
-  virtual inline BlockTrailerType trailerType() const override { return BlockTrailerType::Checksum8Bit; }
+  virtual bool bytesEchoedDuringBlockReceipt() const override { return false; }
+  virtual int initDataBits() const override { return 7; }
+  virtual int initParity() const override { return 1; }
+  virtual int timeBeforeReconnectMs() const override { return 2050; }
+  virtual int isoKeywordNumBytes() const override { return 6; };
+  virtual bool useSequenceNums() const override { return false; }
+  virtual BlockTrailerType trailerType() const override { return BlockTrailerType::Checksum8Bit; }
 };
 
