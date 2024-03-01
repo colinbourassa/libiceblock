@@ -39,27 +39,45 @@ enum class Marelli1AFBlockType : uint8_t
 };
 
 /**
- * A block exchange protocol that has different block titles than KWP-71 or
- * FIAT-9141, and also requires a particular exchange of special blocks
- * immediately after the initialization sequence.
+ * Marelli's 1AF diagnostic protocol is of the block-exchange type, but it has
+ * different block titles than KWP-71 or FIAT-9141, and also requires a
+ * particular exchange of special blocks immediately after the initialization
+ * sequence.
+ *
+ * This protocol is designed specifically for four-cylinder engine ECU
+ * diagnostics, as evidenced by several data structures in its specification.
+ * However, the 1AF protocol (or a close relative) also appears to have been
+ * used for the Marelli F1 gearbox controller on the Ferrari 355 F1. Some of the
+ * protocol's engine-specific features must be unsupported in this configuration.
  */
 class Marelli1AF : public BlockExchangeProtocol
 {
 public:
-  Marelli1AF(bool verbose);
+  explicit Marelli1AF(bool verbose);
+  explicit Marelli1AF(int baudRate, bool verbose);
+
+  bool activateActuator(uint8_t index, uint8_t parameter);
+  bool stopActuator(uint8_t index);
+  bool readMemoryCell(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data);
+  bool readValue(uint8_t valueCode, std::vector<uint8_t>& valueSequence);
+  bool readSnapshot(uint8_t snapshotCode, std::vector<uint8_t>& snapshotData);
+  bool readADCChannel(const std::vector<uint8_t>& channelList,
+                      std::vector<uint8_t>& channelValues);
+  bool writeSecurityCode(const std::vector<uint8_t>& securityCode);
+  bool readErrorMemory(std::vector<uint8_t>& data);
 
 protected:
-  virtual inline bool bytesEchoedDuringBlockReceipt() const override { return false; }
-  virtual inline int initDataBits() const override { return 7; }
-  virtual inline int initParity() const override { return 1; }
-  virtual inline int timeBeforeReconnectMs() const override { return 550; }
-  virtual inline int isoKeywordIndexToEcho() const override { return -1; }
-  virtual inline bool isoKeywordEchoIsInverted() const override { return false; }
-  virtual inline int isoKeywordNumBytes() const override { return 6; }
-  virtual inline bool useSequenceNums() const override { return false; }
-  virtual inline BlockTrailerType trailerType() const override { return BlockTrailerType::Checksum16Bit; }
-  virtual inline uint8_t blockTitleForEmptyAck() const override { return static_cast<uint8_t>(Marelli1AFBlockType::EmptyAck); }
-  virtual inline uint8_t blockTitleForRequestID() const override { return static_cast<uint8_t>(Marelli1AFBlockType::ReadIDCode); }
+  virtual bool bytesEchoedDuringBlockReceipt() const override { return false; }
+  virtual int initDataBits() const override { return 7; }
+  virtual int initParity() const override { return 1; }
+  virtual int timeBeforeReconnectMs() const override { return 550; }
+  virtual int isoKeywordIndexToEcho() const override { return -1; }
+  virtual bool isoKeywordEchoIsInverted() const override { return false; }
+  virtual int isoKeywordNumBytes() const override { return 6; }
+  virtual bool useSequenceNums() const override { return false; }
+  virtual BlockTrailerType trailerType() const override { return BlockTrailerType::Checksum16Bit; }
+  virtual uint8_t blockTitleForEmptyAck() const override { return static_cast<uint8_t>(Marelli1AFBlockType::EmptyAck); }
+  virtual uint8_t blockTitleForRequestID() const override { return static_cast<uint8_t>(Marelli1AFBlockType::ReadIDCode); }
   virtual bool lastReceivedBlockWasEmpty() const override;
   virtual bool lastReceivedBlockWasNack() const override;
 

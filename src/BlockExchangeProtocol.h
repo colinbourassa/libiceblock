@@ -58,17 +58,17 @@ public:
   std::vector<FtdiDeviceInfo> enumerateFtdiDevices(const std::set<std::pair<uint16_t,uint16_t>>& extrtaPids = {});
 
 protected:
-  virtual inline bool bytesEchoedDuringBlockReceipt() const = 0;
-  virtual inline int initDataBits() const = 0;
-  virtual inline int initParity() const = 0;
-  virtual inline int timeBeforeReconnectMs() const = 0;
-  virtual inline int isoKeywordIndexToEcho() const = 0;
-  virtual inline bool isoKeywordEchoIsInverted() const = 0;
-  virtual inline int isoKeywordNumBytes() const = 0;
-  virtual inline bool useSequenceNums() const = 0;
-  virtual inline BlockTrailerType trailerType() const = 0;
-  virtual inline uint8_t blockTitleForEmptyAck() const = 0;
-  virtual inline uint8_t blockTitleForRequestID() const = 0;
+  virtual bool bytesEchoedDuringBlockReceipt() const = 0;
+  virtual int initDataBits() const = 0;
+  virtual int initParity() const = 0;
+  virtual int timeBeforeReconnectMs() const = 0;
+  virtual int isoKeywordIndexToEcho() const = 0;
+  virtual bool isoKeywordEchoIsInverted() const = 0;
+  virtual int isoKeywordNumBytes() const = 0;
+  virtual bool useSequenceNums() const = 0;
+  virtual BlockTrailerType trailerType() const = 0;
+  virtual uint8_t blockTitleForEmptyAck() const = 0;
+  virtual uint8_t blockTitleForRequestID() const = 0;
   virtual bool lastReceivedBlockWasEmpty() const = 0;
   virtual bool lastReceivedBlockWasNack() const = 0;
 
@@ -81,7 +81,7 @@ protected:
 
   bool recvBlock(std::chrono::milliseconds timeout = std::chrono::milliseconds(1000));
   bool sendBlock(bool sendBufIsPrepopulated = false);
-  inline bool shutdownRequested() const { return m_shutdown; }
+  bool shutdownRequested() const { return m_shutdown; }
   void processReceivedBlock();
 
   virtual bool isValidCommandFromTester(uint8_t type) const { return true; }

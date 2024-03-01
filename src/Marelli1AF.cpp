@@ -5,6 +5,11 @@ Marelli1AF::Marelli1AF(bool verbose) :
 {
 }
 
+Marelli1AF::Marelli1AF(int baudRate, bool verbose) :
+  BlockExchangeProtocol(baudRate, verbose)
+{
+}
+
 /**
  * Returns true if the provided block title value represents a block that can
  * be sent by the Tester (as opposed to the vehicle/ECU); false otherwise.
@@ -159,6 +164,95 @@ bool Marelli1AF::doPostKeywordSequence()
       attemptsRemaining--;
     } while (!status && (attemptsRemaining > 0));
   }
+  return status;
+}
+
+bool Marelli1AF::activateActuator(uint8_t index, uint8_t parameter)
+{
+  std::vector<uint8_t> data;
+  CommandBlock cmd;
+  cmd.type = static_cast<uint8_t>(Marelli1AFBlockType::ActivateActuator);
+  cmd.payload = std::vector<uint8_t>({index, parameter});
+  const bool status = sendCommand(cmd, data);
+  return status;
+}
+
+bool Marelli1AF::stopActuator(uint8_t index)
+{
+  std::vector<uint8_t> data;
+  CommandBlock cmd;
+  cmd.type = static_cast<uint8_t>(Marelli1AFBlockType::StopActuator);
+  cmd.payload = std::vector<uint8_t>({index});
+  const bool status = sendCommand(cmd, data);
+  return status;
+}
+
+bool Marelli1AF::readMemoryCell(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data)
+{
+  // TODO: check that the requested number of bytes will fit in
+  // a message block that is within the maximum allowed size
+  CommandBlock cmd;
+  cmd.type = static_cast<uint8_t>(Marelli1AFBlockType::ReadMemoryCell);
+  cmd.payload = std::vector<uint8_t>({
+    static_cast<uint8_t>(addr >> 8),
+    static_cast<uint8_t>(addr & 0xff),
+    numBytes
+  });
+  const bool status = sendCommand(cmd, data);
+  return status;
+}
+
+bool Marelli1AF::readValue(uint8_t valueCode, std::vector<uint8_t>& valueSequence)
+{
+  CommandBlock cmd;
+  cmd.type = static_cast<uint8_t>(Marelli1AFBlockType::ReadValue);
+  cmd.payload = std::vector<uint8_t>({valueCode});
+  const bool status = sendCommand(cmd, valueSequence);
+  return status;
+}
+
+bool Marelli1AF::readSnapshot(uint8_t snapshotCode, std::vector<uint8_t>& snapshotData)
+{
+  CommandBlock cmd;
+  cmd.type = static_cast<uint8_t>(Marelli1AFBlockType::ReadSnapshot);
+  cmd.payload = std::vector<uint8_t>({snapshotCode});
+  const bool status = sendCommand(cmd, snapshotData);
+  return status;
+}
+
+bool Marelli1AF::readADCChannel(const std::vector<uint8_t>& channelList,
+                                std::vector<uint8_t>& channelValues)
+{
+  // TODO: check that the provided channel list is not too long.
+  // The spec lists only seven possible channels (which are non-contiguously
+  // numbered between 00 and 09) but since the 1AF protocol seems to have been
+  // used on at least one system that was not an engine, this list may vary
+  // between different applications.
+  // We may not even want to interpret the returned data, leaving that as an
+  // exercise for the application.
+  CommandBlock cmd;
+  cmd.type = static_cast<uint8_t>(Marelli1AFBlockType::ReadADCChannel);
+  cmd.payload = channelList;
+  const bool status = sendCommand(cmd, channelValues);
+  return status;
+}
+
+bool Marelli1AF::writeSecurityCode(const std::vector<uint8_t>& securityCode)
+{
+  std::vector<uint8_t> response;
+  CommandBlock cmd;
+  cmd.type = static_cast<uint8_t>(Marelli1AFBlockType::WriteRAM);
+  cmd.payload = securityCode;
+  cmd.payload.insert(cmd.payload.begin(), {0x0b});
+  const bool status = sendCommand(cmd, response);
+  return status;
+}
+
+bool Marelli1AF::readErrorMemory(std::vector<uint8_t>& data)
+{
+  CommandBlock cmd;
+  cmd.type = static_cast<uint8_t>(Marelli1AFBlockType::ReadMemoryCell);
+  const bool status = sendCommand(cmd, data);
   return status;
 }
 

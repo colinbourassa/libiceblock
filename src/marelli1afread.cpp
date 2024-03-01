@@ -28,6 +28,7 @@ int main(int argc, char** argv)
   }
 
   // This is for TRW airbag ECU (p/n 60631206, 46538798, and 60615633)
+  // Note that this will likely need to change for an actual 1AF ECU.
   const uint8_t ecuAddr = 0x80;
 
   printf("Attempting connection via FTDI %04x/%04x to ECU addr %02x...\n",
@@ -38,7 +39,7 @@ int main(int argc, char** argv)
     printf("Connected successfully.\n");
     std::vector<uint8_t> data;
 
-    if (marelli.readROM(0x0000, 8, data))
+    if (marelli.readMemoryCell(0x0000, 8, data))
     {
       printf("Read %d bytes.\n", data.size());
       for (int index = 0; index < data.size(); index++)

@@ -47,17 +47,17 @@ public:
   bool eraseFaultCodes();
 
 protected:
-  virtual inline bool bytesEchoedDuringBlockReceipt() const override { return true; }
-  virtual inline int initDataBits() const override { return 8; }
-  virtual inline int initParity() const override { return 0; }
-  virtual inline int timeBeforeReconnectMs() const override { return 260; }
-  virtual inline int isoKeywordIndexToEcho() const override { return 2; }
-  virtual inline bool isoKeywordEchoIsInverted() const override { return true; }
-  virtual inline int isoKeywordNumBytes() const override { return 3; }
-  virtual inline bool useSequenceNums() const override { return true; }
-  virtual inline BlockTrailerType trailerType() const override { return BlockTrailerType::Fixed03; }
-  virtual inline uint8_t blockTitleForEmptyAck() const override { return static_cast<uint8_t>(KWP71BlockType::Empty); }
-  virtual inline uint8_t blockTitleForRequestID() const override { return static_cast<uint8_t>(KWP71BlockType::RequestID); }
+  virtual bool bytesEchoedDuringBlockReceipt() const override { return true; }
+  virtual int initDataBits() const override { return 8; }
+  virtual int initParity() const override { return 0; }
+  virtual int timeBeforeReconnectMs() const override { return 260; }
+  virtual int isoKeywordIndexToEcho() const override { return 2; }
+  virtual bool isoKeywordEchoIsInverted() const override { return true; }
+  virtual int isoKeywordNumBytes() const override { return 3; }
+  virtual bool useSequenceNums() const override { return true; }
+  virtual BlockTrailerType trailerType() const override { return BlockTrailerType::Fixed03; }
+  virtual uint8_t blockTitleForEmptyAck() const override { return static_cast<uint8_t>(KWP71BlockType::Empty); }
+  virtual uint8_t blockTitleForRequestID() const override { return static_cast<uint8_t>(KWP71BlockType::RequestID); }
   virtual bool lastReceivedBlockWasEmpty() const override;
   virtual bool lastReceivedBlockWasNack() const override;
 
