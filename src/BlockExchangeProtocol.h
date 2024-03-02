@@ -6,7 +6,7 @@
 #include <memory>
 #include <set>
 #include <condition_variable>
-#include <stdint.h>
+#include <cstdint>
 #include <libftdi1/ftdi.h>
 
 struct FtdiDeviceInfo
