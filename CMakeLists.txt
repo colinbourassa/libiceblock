@@ -3,9 +3,9 @@ project (libiceblock LANGUAGES CXX)
 include (GNUInstallDirs)
 
 set(PROJECT_NAME "libiceblock")
-set(PROJECT_DESCRIPTION "Library supporting serial communication with ECUs that speak the KP-71 / KWP-71 protocol")
+set(PROJECT_DESCRIPTION "Library for serial communication with ECUs that speak block exchange protocols such as KWP-71")
 set(PROJECT_AUTHOR "Colin Bourassa <colin.bourassa@gmail.com>")
-set(PROJECT_URL "https://github.com/colinbourassa/libkwp71")
+set(PROJECT_URL "https://github.com/colinbourassa/libiceblock")
 
 set (ICEBLOCK_VER_MAJOR 1)
 set (ICEBLOCK_VER_MINOR 0)
@@ -207,7 +207,8 @@ else()
     set (CPACK_DEBIAN_PACKAGE_NAME ${CPACK_PACKAGE_NAME})
     set (CPACK_DEBIAN_PACKAGE_MAINTAINER "${PROJECT_AUTHOR}")
     set (CPACK_DEBIAN_PACKAGE_SECTION "Libraries")
-    set (CPACK_DEBIAN_PACKAGE_DEPENDS "libc6 (>= 2.13)")
+    # TODO: require libstdc++ minimum for C++17 support
+    set (CPACK_DEBIAN_PACKAGE_DEPENDS "libc6 (>= 2.14), libusb-1.0-0 (>= 2:1.0.26), libftdi1-2 (>= 1.5)")
     set (CPACK_PACKAGE_DESCRIPTION_SUMMARY "${PROJECT_DESCRIPTION}")
     set (CPACK_PACKAGE_FILE_NAME "${PROJECT_NAME}-${ICEBLOCK_VERSION}-${CMAKE_SYSTEM_NAME}-${CPACK_DEBIAN_PACKAGE_ARCHITECTURE}")
     set (CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE")
@@ -222,6 +223,7 @@ endif()
 #
 install (FILES "${SOURCE_SUBDIR}/KWP71.h"
                "${SOURCE_SUBDIR}/Fiat9141.h"
+               "${SOURCE_SUBDIR}/Marelli1AF.h"
                "${CMAKE_BINARY_DIR}/iceblock_version.h"
          DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
          PERMISSIONS
