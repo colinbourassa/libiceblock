@@ -60,6 +60,7 @@ protected:
   virtual uint8_t blockTitleForRequestID() const override { return static_cast<uint8_t>(KWP71BlockType::RequestID); }
   virtual bool lastReceivedBlockWasEmpty() const override;
   virtual bool lastReceivedBlockWasNack() const override;
+  virtual unsigned int maxPayloadSize() const override { return 252; }
 
   virtual bool doPostKeywordSequence() override;
   virtual bool isValidCommandFromTester(uint8_t type) const override;

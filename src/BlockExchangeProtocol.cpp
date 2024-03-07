@@ -187,17 +187,23 @@ bool BlockExchangeProtocol::populateBlock(bool& usedPendingCmd)
 }
 
 /**
- * Sets the first byte in the block to reflect the number of the bytes
- * that follow. There will be one byte required for the block title,
- * plus a sequence number byte (for certain protocols), plus the
- * size of the payload (if any), plus the size of the trailer (which
- * will be either one or two bytes, again depending on protocol variant.
+ * Sets the first byte in the block to reflect the size of the block (in bytes).
+ * Depending on the protocol, the count may include (a) the block size byte
+ * itself, (b) a sequence number byte, (c) the payload, and (d) the trailer
+ * (which may be a fixed value, an 8-bit checksum, or a 16-bit checksum).
+ *
+ * Note: The GM-developed KW82 protocol actually includes the count byte itself
+ * in the total byte count. Support for the KW82 protocol is not currently
+ * planned, but if it were added at some point in the future, this routine would
+ * need to be adjusted.
  */
 void BlockExchangeProtocol::setBlockSizePrefix(int payloadSize)
 {
   const uint8_t seqNumSize = (useSequenceNums() ? 1 : 0);
-  const uint8_t blockTrailerSize = (trailerType() == BlockTrailerType::Checksum16Bit) ? 2 : 1;
-  m_sendBlockBuf[0] = seqNumSize + 1 + payloadSize + blockTrailerSize;
+  const uint8_t titleSize = 1;
+  const uint8_t trailerSize = (trailerType() == BlockTrailerType::Checksum16Bit) ? 2 : 1;
+
+  m_sendBlockBuf[0] = seqNumSize + titleSize + payloadSize + trailerSize;
 }
 
 /**

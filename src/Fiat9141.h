@@ -23,5 +23,6 @@ protected:
   virtual int isoKeywordNumBytes() const override { return 6; };
   virtual bool useSequenceNums() const override { return false; }
   virtual BlockTrailerType trailerType() const override { return BlockTrailerType::Checksum8Bit; }
+  virtual unsigned int maxPayloadSize() const override { return 29; }
 };
 

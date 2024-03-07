@@ -91,6 +91,13 @@ protected:
   virtual bool lastReceivedBlockWasEmpty() const override;
   virtual bool lastReceivedBlockWasNack() const override;
 
+  /**
+   * NOTE: This -- and other parameters of this protocol -- may be
+   * different for non-engine implementations of 1AF (e.g. for the
+   * Ferrari F1 gearbox controller.)
+   */
+  virtual unsigned int maxPayloadSize() const override { return 16; }
+
   virtual bool isValidCommandFromTester(uint8_t type) const override;
   virtual bool checkValidityOfBlockAndPayload(uint8_t title, const std::vector<uint8_t>& payload) const override;
   virtual bool doPostKeywordSequence() override;

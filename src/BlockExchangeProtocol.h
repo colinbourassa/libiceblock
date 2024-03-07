@@ -71,6 +71,9 @@ protected:
   virtual uint8_t blockTitleForRequestID() const = 0;
   virtual bool lastReceivedBlockWasEmpty() const = 0;
   virtual bool lastReceivedBlockWasNack() const = 0;
+  // TODO: Use this while building outgoing blocks, to ensure that we do not
+  // exceed the size allowed by the spec.
+  virtual unsigned int maxPayloadSize() const = 0;
 
   int m_baudRate;
   uint8_t m_sendBlockBuf[256];

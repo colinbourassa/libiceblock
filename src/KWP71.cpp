@@ -138,9 +138,8 @@ bool KWP71::eraseFaultCodes()
 bool KWP71::readRAM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data)
 {
   bool status = false;
-  const uint8_t blockOverhead = useSequenceNums() ? 3 : 2;
 
-  if (numBytes <= (UINT8_MAX - blockOverhead))
+  if (numBytes <= maxPayloadSize())
   {
     CommandBlock cmd;
     cmd.type = static_cast<uint8_t>(KWP71BlockType::ReadRAM);
@@ -162,9 +161,8 @@ bool KWP71::readRAM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data)
 bool KWP71::readROM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data)
 {
   bool status = false;
-  const uint8_t blockOverhead = useSequenceNums() ? 3 : 2;
 
-  if (numBytes <= (UINT8_MAX - blockOverhead))
+  if (numBytes <= maxPayloadSize())
   {
     CommandBlock cmd;
     cmd.type = static_cast<uint8_t>(KWP71BlockType::ReadROM);
@@ -186,9 +184,8 @@ bool KWP71::readROM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data)
 bool KWP71::readEEPROM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data)
 {
   bool status = false;
-  const uint8_t blockOverhead = useSequenceNums() ? 3 : 2;
 
-  if (numBytes <= (UINT8_MAX - blockOverhead))
+  if (numBytes <= maxPayloadSize())
   {
     CommandBlock cmd;
     cmd.type = static_cast<uint8_t>(KWP71BlockType::ReadEEPROM);
@@ -209,13 +206,12 @@ bool KWP71::readEEPROM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& da
 bool KWP71::writeRAM(uint16_t addr, const std::vector<uint8_t>& data)
 {
   bool status = false;
-  const uint8_t blockOverhead = useSequenceNums() ? 3 : 2;
 
   // Limit the maximum write payload to the size of the remaining
   // space in a single block (after accounting for the header/trailer).
   // This is a max of 249 bytes for the standard variant, or 250 bytes
   // for FIAT9141.
-  if (data.size() <= (UINT8_MAX - blockOverhead - 3))
+  if (data.size() <= (maxPayloadSize() - 3))
   {
     CommandBlock cmd;
     cmd.type = static_cast<uint8_t>(KWP71BlockType::WriteRAM);
@@ -241,13 +237,12 @@ bool KWP71::writeRAM(uint16_t addr, const std::vector<uint8_t>& data)
 bool KWP71::writeEEPROM(uint16_t addr, const std::vector<uint8_t>& data)
 {
   bool status = false;
-  const uint8_t blockOverhead = useSequenceNums() ? 3 : 2;
 
   // Limit the maximum write payload to the size of the remaining
   // space in a single block (after accounting for the header/trailer).
   // This is a max of 249 bytes for the standard variant, or 250 bytes
   // for FIAT9141.
-  if (data.size() <= (UINT8_MAX - blockOverhead - 3))
+  if (data.size() <= (maxPayloadSize() - 3))
   {
     CommandBlock cmd;
     cmd.type = static_cast<uint8_t>(KWP71BlockType::WriteRAM);
