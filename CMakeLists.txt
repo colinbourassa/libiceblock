@@ -1,8 +1,9 @@
 cmake_minimum_required (VERSION 3.0)
-project (libiceblock LANGUAGES CXX)
+set (LIBNAME iceblock)
+project (lib${LIBNAME} LANGUAGES CXX)
 include (GNUInstallDirs)
 
-set(PROJECT_NAME "libiceblock")
+set(PROJECT_NAME "lib${LIBNAME}")
 set(PROJECT_DESCRIPTION "Library for serial communication with ECUs that speak block exchange protocols such as KWP-71")
 set(PROJECT_AUTHOR "Colin Bourassa <colin.bourassa@gmail.com>")
 set(PROJECT_URL "https://github.com/colinbourassa/libiceblock")
@@ -34,7 +35,7 @@ set (CPACK_SOURCE_IGNORE_FILES
       "cmake_install.cmake"
       "install_manifest.txt"
       "Makefile"
-      "iceblock_version.h$"
+      "${LIBNAME}_version.h$"
       "build/"
       "build-win32")
 
@@ -50,8 +51,8 @@ if (NOT LIBRARY_USB_FOUND)
   message(FATAL_ERROR "LibUSB 1.0 required to build.")
 endif()
 
-configure_file ("${SOURCE_SUBDIR}/iceblock_version.h.in"
-                "${CMAKE_BINARY_DIR}/iceblock_version.h")
+configure_file ("${SOURCE_SUBDIR}/${LIBNAME}_version.h.in"
+                "${CMAKE_BINARY_DIR}/${LIBNAME}_version.h")
 
 include_directories ("${CMAKE_SOURCE_DIR}/src" "${CMAKE_BINARY_DIR}" "${LIBRARY_USB_INCLUDE_DIRS}")
 
@@ -69,12 +70,13 @@ set (ALL_SOURCE_FILES
     )
 
 if (BUILD_STATIC STREQUAL "ON")
-  add_library (iceblock STATIC ${ALL_SOURCE_FILES})
+  add_library (${LIBNAME} STATIC ${ALL_SOURCE_FILES})
 else()
-  add_library (iceblock SHARED ${ALL_SOURCE_FILES})
+  add_library (${LIBNAME} SHARED ${ALL_SOURCE_FILES})
 endif()
 
-target_link_libraries (iceblock usb-1.0 ftdi1)
+target_compile_features (${LIBNAME} PUBLIC cxx_std_17)
+target_link_libraries (${LIBNAME} usb-1.0 ftdi1)
 
 add_executable (kwp71read ${SOURCE_SUBDIR}/kwp71read.cpp)
 add_executable (fiat9141read ${SOURCE_SUBDIR}/fiat9141read.cpp)
@@ -93,15 +95,15 @@ if (MINGW OR WIN32)
   configure_file ("${CMAKE_SOURCE_DIR}/LICENSE" "${CMAKE_BINARY_DIR}/LICENSE.TXT" NEWLINE_STYLE WIN32)
 
   set_target_properties (
-    iceblock
+    ${LIBNAME}
       PROPERTIES
         SOVERSION ${ICEBLOCK_VER_MAJOR}
         VERSION   ${ICEBLOCK_VER_MAJOR}
   )
 
-  target_link_libraries (kwp71read iceblock)
-  target_link_libraries (fiat9141read iceblock)
-  target_link_libraries (marelli1afread iceblock)
+  target_link_libraries (kwp71read ${LIBNAME})
+  target_link_libraries (fiat9141read ${LIBNAME})
+  target_link_libraries (marelli1afread ${LIBNAME})
 
   # MXE requires that documentation and test applications not be installed
   # by default, so we provide a couple env vars to control this
@@ -152,15 +154,15 @@ else()
   set (CMAKE_SKIP_RPATH TRUE)
 
   set_target_properties (
-    iceblock
+    ${LIBNAME}
       PROPERTIES
         SOVERSION ${ICEBLOCK_VER_MAJOR}
         VERSION   ${ICEBLOCK_VERSION}
   )
 
-  target_link_libraries (kwp71read iceblock)
-  target_link_libraries (fiat9141read iceblock)
-  target_link_libraries (marelli1afread iceblock)
+  target_link_libraries (kwp71read ${LIBNAME})
+  target_link_libraries (fiat9141read ${LIBNAME})
+  target_link_libraries (marelli1afread ${LIBNAME})
 
   if (ENABLE_DOC_INSTALL)
     install (DIRECTORY DESTINATION "${CMAKE_INSTALL_DOCDIR}" DIRECTORY_PERMISSIONS
@@ -224,7 +226,7 @@ endif()
 install (FILES "${SOURCE_SUBDIR}/KWP71.h"
                "${SOURCE_SUBDIR}/Fiat9141.h"
                "${SOURCE_SUBDIR}/Marelli1AF.h"
-               "${CMAKE_BINARY_DIR}/iceblock_version.h"
+               "${CMAKE_BINARY_DIR}/${LIBNAME}_version.h"
          DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
          PERMISSIONS
           OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ)
@@ -232,15 +234,15 @@ install (FILES "${SOURCE_SUBDIR}/KWP71.h"
 #
 # install the library
 #
-install (TARGETS iceblock
+install (TARGETS ${LIBNAME}
          LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}")
 
 #
 # install the pkgconfig file
 #
 if (ENABLE_PKGCONFIG_INSTALL)
-  set (LIBICEBLOCK_PC "${CMAKE_BINARY_DIR}/libiceblock.pc")
-  configure_file ("${CMAKE_SOURCE_DIR}/libiceblock.pc.cmakein" ${LIBICEBLOCK_PC} @ONLY)
+  set (LIBICEBLOCK_PC "${CMAKE_BINARY_DIR}/lib${LIBNAME}.pc")
+  configure_file ("${CMAKE_SOURCE_DIR}/lib${LIBNAME}.pc.cmakein" ${LIBICEBLOCK_PC} @ONLY)
 
   install (FILES "${LIBICEBLOCK_PC}"
            DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig"
