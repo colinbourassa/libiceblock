@@ -43,6 +43,7 @@ option (ENABLE_DOC_INSTALL "Enables installation of documentation (README, LICEN
 option (ENABLE_TESTAPP_INSTALL "Enables installation of the test/read utilities" OFF)
 option (ENABLE_PKGCONFIG_INSTALL "Enables installation of a pkgconfig configuration file" ON)
 
+find_package (spdlog)
 find_package (LibFTDI1 CONFIG REQUIRED)
 find_package (PkgConfig)
 pkg_check_modules(LIBRARY_USB libusb-1.0 IMPORTED_TARGET)
@@ -76,7 +77,7 @@ else()
 endif()
 
 target_compile_features (${LIBNAME} PUBLIC cxx_std_17)
-target_link_libraries (${LIBNAME} usb-1.0 ftdi1)
+target_link_libraries (${LIBNAME} spdlog::spdlog_header_only usb-1.0 ftdi1)
 
 add_executable (kwp71read ${SOURCE_SUBDIR}/kwp71read.cpp)
 add_executable (fiat9141read ${SOURCE_SUBDIR}/fiat9141read.cpp)

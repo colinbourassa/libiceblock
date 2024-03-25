@@ -4,13 +4,22 @@
 #include <chrono>
 #include <mutex>
 #include <unistd.h>
+#include <spdlog/spdlog.h>
+#include <spdlog/fmt/fmt.h>
 
 /**
  */
 BlockExchangeProtocol::BlockExchangeProtocol(int baudRate, bool verbose) :
-  m_baudRate(baudRate),
-  m_verbose(verbose)
+  m_baudRate(baudRate)
 {
+  if (verbose)
+  {
+    spdlog::set_level(spdlog::level::debug);
+  }
+  else
+  {
+    spdlog::set_level(spdlog::level::off);
+  }
   ftdi_init(&m_ftdi);
 }
 
@@ -41,14 +50,14 @@ bool BlockExchangeProtocol::connectByBusAddr(uint8_t bus, uint8_t addr, uint8_t 
       {
         status = initAndStartCommunication();
       }
-      else if (m_verbose)
+      else
       {
-        fprintf(stderr, "Error: ftdi_usb_open() failed for bus %03d / addr %03d\n", bus, addr);
+        spdlog::error("ftdi_usb_open() failed for bus {:03d} / addr {:03d}", bus, addr);
       }
     }
-    else if (m_verbose)
+    else
     {
-      fprintf(stderr, "Error: ftdi_set_interface() failed.\n");
+      spdlog::error("ftdi_set_interface() failed.");
     }
   }
 
@@ -78,14 +87,14 @@ bool BlockExchangeProtocol::connectByDeviceId(uint16_t vendorId, uint16_t produc
       {
         status = initAndStartCommunication();
       }
-      else if (m_verbose)
+      else
       {
-        fprintf(stderr, "Error: ftdi_usb_open() failed for VID %04X / PID %04X\n", vendorId, productId);
+        spdlog::error("ftdi_usb_open() failed for VID {:04x} / PID {:04x}", vendorId, productId);
       }
     }
-    else if (m_verbose)
+    else
     {
-      fprintf(stderr, "Error: ftdi_set_interface() failed.\n");
+      spdlog::error("ftdi_set_interface() failed.");
     }
   }
 
@@ -110,19 +119,19 @@ bool BlockExchangeProtocol::initAndStartCommunication()
         m_ifThreadPtr = std::make_unique<std::thread>(threadEntry, this);
         status = true;
       }
-      else if (m_verbose)
+      else
       {
-        fprintf(stderr, "Error receiving/acknowledging keyword byte sequence.\n");
+        spdlog::error("Failed to receive/acknowledge keyword byte sequence.");
       }
     }
-    else if (m_verbose)
+    else
     {
-      fprintf(stderr, "Error setting FTDI serial properties after slow init.\n");
+      spdlog::error("Failed to set FTDI serial properties after slow init.");
     }
   }
-  else if (m_verbose)
+  else
   {
-    fprintf(stderr, "Error during slow init sequence.\n");
+    spdlog::error("Error during slow init sequence.");
   }
 
   return status;
@@ -292,15 +301,12 @@ bool BlockExchangeProtocol::sendBlock(bool sendBufIsPrepopulated)
   uint8_t ack = 0;
   uint8_t ackCompare = 0;
   bool usedPendingCommand = false;
+  const bool isDebugLogging = spdlog::should_log(spdlog::level::debug);
+  std::string msg("send: ");
 
   if (!sendBufIsPrepopulated)
   {
     populateBlock(usedPendingCommand);
-  }
-
-  if (m_verbose)
-  {
-    printf("send: ");
   }
 
   while (status && (index <= m_sendBlockBuf[0]))
@@ -309,9 +315,9 @@ bool BlockExchangeProtocol::sendBlock(bool sendBufIsPrepopulated)
     // it appears in the Rx buffer (due to the loopback).
     if (writeSerial(&m_sendBlockBuf[index], 1) && readSerial(&loopback, 1))
     {
-      if (m_verbose)
+      if (isDebugLogging)
       {
-        printf("%02X ", m_sendBlockBuf[index]);
+        msg += fmt::format("{:02X} ", m_sendBlockBuf[index]);
       }
 
       // If the current protocol variant calls for it, read the bitwise
@@ -329,10 +335,8 @@ bool BlockExchangeProtocol::sendBlock(bool sendBufIsPrepopulated)
       status = false;
     }
   }
-  if (m_verbose)
-  {
-    printf("\n");
-  }
+
+  spdlog::debug(msg);
 
   // if we had been waiting to send a command block (i.e. not just an 09/ACK),
   // then this sendBlock() call would have transmitted it so the 'pending'
@@ -358,17 +362,14 @@ bool BlockExchangeProtocol::recvBlock(std::chrono::milliseconds timeout)
   uint16_t index = 1;
   uint8_t loopback = 0;
   uint8_t ack = 0;
-
-  if (m_verbose)
-  {
-    printf("recv: ");
-  }
+  const bool isDebugLogging = spdlog::should_log(spdlog::level::debug);
+  std::string msg("recv: ");
 
   if (readSerial(&m_recvBlockBuf[0], 1, timeout))
   {
-    if (m_verbose)
+    if (isDebugLogging)
     {
-      printf("%02X ", m_recvBlockBuf[0]);
+      msg += fmt::format("{:02X} ", m_recvBlockBuf[0]);
     }
 
     if (bytesEchoedDuringBlockReceipt())
@@ -383,9 +384,9 @@ bool BlockExchangeProtocol::recvBlock(std::chrono::milliseconds timeout)
     {
       if (readSerial(&m_recvBlockBuf[index], 1))
       {
-        if (m_verbose)
+        if (isDebugLogging)
         {
-          printf("%02X ", m_recvBlockBuf[index]);
+          msg += fmt::format("{:02X} ", m_recvBlockBuf[index]);
         }
 
         // every byte except the last in the block is ack'd
@@ -399,18 +400,12 @@ bool BlockExchangeProtocol::recvBlock(std::chrono::milliseconds timeout)
       }
       else
       {
-        if (m_verbose)
-        {
-          fprintf(stderr, "Timed out while receiving block data!\n");
-        }
+        spdlog::error("Timed out while receiving block data!");
         status = false;
       }
     }
 
-    if (m_verbose)
-    {
-      printf("\n");
-    }
+    spdlog::debug(msg);
   }
   else
   {
@@ -438,19 +433,19 @@ bool BlockExchangeProtocol::setFtdiSerialProperties()
     if (status == 0)
     {
       status = ftdi_set_latency_timer(&m_ftdi, 1);
-      if ((status != 0) && m_verbose)
+      if (status != 0)
       {
-        fprintf(stderr, "Failed to set FTDI latency timer (\"%s\")\n", ftdi_get_error_string(&m_ftdi));
+        spdlog::error("Failed to set FTDI latency timer ('{}')", ftdi_get_error_string(&m_ftdi));
       }
     }
-    else if (m_verbose)
+    else
     {
-      fprintf(stderr, "Failed to set FTDI line properties (\"%s\")\n", ftdi_get_error_string(&m_ftdi));
+      spdlog::error("Failed to set FTDI line properties ('{}')", ftdi_get_error_string(&m_ftdi));
     }
   }
-  else if (m_verbose)
+  else
   {
-    fprintf(stderr, "Failed to set FTDI baud rate (\"%s\")\n", ftdi_get_error_string(&m_ftdi));
+    spdlog::error("Failed to set FTDI baud rate ('{}')", ftdi_get_error_string(&m_ftdi));
   }
   return (status == 0);
 }
@@ -512,10 +507,7 @@ bool BlockExchangeProtocol::slowInit(uint8_t address, int databits, int parity)
   int bitindex = 0;
   int parityCount = 0;
 
-  if (m_verbose)
-  {
-    printf("Performing slow init (addr %02X, %d data bits, %d parity)...\n", address, databits, parity);
-  }
+  spdlog::debug("Performing slow init (addr {:02X}, {} data bits, {} parity)...", address, databits, parity);
 
   // Enable bitbang mode with a single output line (TXD)
   if ((f = ftdi_set_bitmode(&m_ftdi, 0x01, BITMODE_BITBANG)) == 0)
@@ -561,14 +553,14 @@ bool BlockExchangeProtocol::slowInit(uint8_t address, int databits, int parity)
       ftdi_tcioflush(&m_ftdi);
       status = true;
     }
-    else if (m_verbose)
+    else
     {
-      fprintf(stderr, "Failed to disable bitbang mode\n");
+      spdlog::error("Failed to disable bitbang mode");
     }
   }
-  else if (m_verbose)
+  else
   {
-    fprintf(stderr, "Failed to set bitbang mode\n");
+    spdlog::error("Failed to set bitbang mode");
   }
 
   return status;
@@ -590,6 +582,7 @@ bool BlockExchangeProtocol::waitForISOSequence(std::chrono::milliseconds timeout
   isoBytes.clear();
   const std::chrono::time_point start = std::chrono::steady_clock::now();
   const std::chrono::time_point end = start + timeout;
+  const bool isDebugLogging = spdlog::should_log(spdlog::level::debug);
 
   while ((matchedBytes < isoKeywordNumBytes()) &&
          (std::chrono::steady_clock::now() < end))
@@ -606,14 +599,14 @@ bool BlockExchangeProtocol::waitForISOSequence(std::chrono::milliseconds timeout
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
 
-  if (m_verbose && isoBytes.size())
+  if (isDebugLogging && isoBytes.size())
   {
-    printf("Got ISO keyword sequence:");
-    for (int i = 0; i < isoBytes.size(); i++)
+    std::string msg("Got ISO keyword sequence:");
+    for (auto isoByte : isoBytes)
     {
-      printf(" %02X", isoBytes.at(i));
+      msg += fmt::format(" {:02X}", isoByte);
     }
-    printf("\n");
+    spdlog::debug(msg);
   }
 
   return (matchedBytes == isoKeywordNumBytes());
@@ -647,7 +640,8 @@ bool BlockExchangeProtocol::readAckKeywordBytes()
     }
     else
     {
-      fprintf(stderr, "Error: ISO byte index to echo (%d) is not within the size of the ISO sequence (%d).\n", isoKeywordEchoIsInverted(), isoBytes.size());
+      spdlog::error("ISO byte index to echo ({}) is not within the size of the ISO sequence ({})",
+        isoKeywordIndexToEcho(), isoBytes.size());
     }
   }
 
@@ -796,10 +790,7 @@ void BlockExchangeProtocol::commLoop()
           m_responseReadSuccess = false;
           m_responseCondVar.notify_one();
         }
-        if (m_verbose)
-        {
-          fprintf(stderr, "ECU didn't respond during its turn\n");
-        }
+        spdlog::error("ECU didn't respond during its turn");
         m_connectionActive = false;
       }
     }

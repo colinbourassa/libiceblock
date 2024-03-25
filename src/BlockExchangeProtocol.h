@@ -92,7 +92,6 @@ protected:
   virtual bool doPostKeywordSequence() { return true; }
 
 private:
-  bool m_verbose;
   bool m_connectionActive = false;
   bool m_shutdown = false;
   uint8_t m_ecuAddr = 0x10;
