@@ -144,7 +144,6 @@ bool BlockExchangeProtocol::initAndStartCommunication()
 void BlockExchangeProtocol::disconnect()
 {
   std::unique_lock<std::mutex> lock(m_connectMutex);
-
   if (m_ifThreadPtr && m_ifThreadPtr->joinable())
   {
     m_shutdown = true;
@@ -799,12 +798,15 @@ void BlockExchangeProtocol::commLoop()
       }
     }
 
-    // Since we believe that the connection has failed, delay for slightly
-    // longer than the maximum time allowed by the spec between responses.
-    // This will ensure that the ECU also sees the connection as having
-    // been terminated. A re-connection (with slow init) will not work unless
-    // we're on the same page as the ECU.
-    std::this_thread::sleep_for(std::chrono::milliseconds(timeBeforeReconnectMs()));
+    if (!m_shutdown)
+    {
+      // Since we believe that the connection has failed, delay for slightly
+      // longer than the maximum time allowed by the spec between responses.
+      // This will ensure that the ECU also sees the connection as having
+      // been terminated. A re-connection (with slow init) will not work unless
+      // we're on the same page as the ECU.
+      std::this_thread::sleep_for(std::chrono::milliseconds(timeBeforeReconnectMs()));
+    }
   }
 }
 
