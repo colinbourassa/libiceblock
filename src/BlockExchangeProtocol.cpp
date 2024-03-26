@@ -721,7 +721,6 @@ void BlockExchangeProtocol::processReceivedBlock()
     blockPayloadStartPos = 2;
   }
 
-  // if (shouldCapturePayloadFromBlock())
   m_lastReceivedPayload.insert(m_lastReceivedPayload.end(),
                                &m_recvBlockBuf[blockPayloadStartPos],
                                &m_recvBlockBuf[blockPayloadStartPos + payloadLen]);
@@ -759,6 +758,11 @@ void BlockExchangeProtocol::commLoop()
     // Do any special one-off block exchance sequence that happens
     // immediately after receipt/acknowledgement of the keyword sequence
     m_connectionActive = doPostKeywordSequence();
+
+    // Clear the buffer containing the last-received payload so that any initial
+    // ECU ID data doesn't inadvertently get sent along with the response to any
+    // subsequent requests for memory content, fault codes, etc.
+    m_lastReceivedPayload.clear();
 
     // continue taking turns with the ECU, sending one block per turn
     while (m_connectionActive && !m_shutdown)
