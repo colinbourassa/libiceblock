@@ -1,6 +1,13 @@
 #include "BlockExchangeProtocol.h"
 #include <cstdint>
 
+/**
+ * Block title values for KWP-71.
+ * There are some ECUs that appear to be using KWP-71 for communication, but
+ * that use non-standard block titles (probably for obfuscation of the interface).
+ * These include the Ferrari F355 Motronic 5.2, which apparently responds to a
+ * block 0x3A request with fault code data.
+ */
 enum class KWP71BlockType : uint8_t
 {
   RequestID         = 0x00,
