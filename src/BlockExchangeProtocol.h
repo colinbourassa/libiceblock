@@ -35,6 +35,12 @@ struct CommandBlock
   std::vector<uint8_t> payload;
 };
 
+enum class LineType
+{
+  KLine,
+  LLine
+};
+
 enum class BlockTrailerType
 {
   Fixed03,
@@ -72,6 +78,19 @@ public:
    * Sets the baud rate that will be used for communicating with the ECU.
    */
   void setBaudRate(int baudRate) { m_baudRate = baudRate; }
+
+  /**
+   * Sets the line (K or L) used by each of several phases of initialization
+   * and communication. This function is provided because implementations of
+   * a given protocol may vary between different ECUs. For example, some ECUs
+   * that speak KWP-71 might expect the slow-init address byte on the L-line,
+   * while other KWP-71 ECUs simply use the K-line for everything, including
+   * slow init.
+   */
+  void setLineSelection(LineType slowInitAddrLine,
+                        LineType keywordBytesReceiptLine,
+                        LineType keywordBytesAckLine,
+                        LineType mainCommsLine);
 
   /**
    * Stops the block exchange and disconnects.
@@ -198,6 +217,10 @@ protected:
   virtual bool doPostKeywordSequence() { return true; }
 
   int m_baudRate;
+  LineType m_slowInitAddrLine = LineType::KLine;
+  LineType m_keywordBytesReceiptLine = LineType::KLine;
+  LineType m_keywordBytesAckLine = LineType::KLine;
+  LineType m_mainCommsLine = LineType::KLine;
   uint8_t m_sendBlockBuf[256];
   uint8_t m_recvBlockBuf[256];
   uint8_t m_lastUsedSeqNum = 0;
