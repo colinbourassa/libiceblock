@@ -1,5 +1,4 @@
 #include "BlockExchangeProtocol.h"
-#include <stdio.h>
 #include <libusb.h>
 #include <chrono>
 #include <mutex>
@@ -8,18 +7,13 @@
 #include <spdlog/fmt/fmt.h>
 
 /**
+ * Construct with the baud rate, line used for sending the slow-init byte, and debug verbosity flag.
  */
-BlockExchangeProtocol::BlockExchangeProtocol(int baudRate, bool verbose) :
-  m_baudRate(baudRate)
+BlockExchangeProtocol::BlockExchangeProtocol(int baudRate, LineType initLine, bool verbose) :
+  m_baudRate(baudRate),
+  m_slowInitLine(initLine)
 {
-  if (verbose)
-  {
-    spdlog::set_level(spdlog::level::debug);
-  }
-  else
-  {
-    spdlog::set_level(spdlog::level::off);
-  }
+  spdlog::set_level(verbose ? spdlog::level::debug : spdlog::level::off);
   ftdi_init(&m_ftdi);
 }
 
@@ -286,10 +280,10 @@ void BlockExchangeProtocol::setBlockTrailer()
 }
 
 /**
- * Sends a block by transmitting it one byte at a time. For certain
- * protocols, the transmitting side must wait for the inverse of
- * each byte echoed by the receiver before transmitting the next byte (with the
- * exception of the last byte, which is not echoed.)
+ * Sends a block by transmitting it one byte at a time. For certain protocols,
+ * the transmitting side must wait for the inverse of each byte echoed by the
+ * receiver before transmitting the next byte (with the exception of the last
+ * byte, which is not echoed.)
  * Returns true if the entire block was sent successfuly; false otherwise.
  */
 bool BlockExchangeProtocol::sendBlock(bool sendBufIsPrepopulated)
@@ -508,6 +502,9 @@ bool BlockExchangeProtocol::slowInit(uint8_t address, int databits, int parity)
 
   spdlog::debug("Performing slow init (addr {:02X}, {} data bits, {} parity)...", address, databits, parity);
 
+  // TODO: Determine the correct mask for the L-line
+  cosnt unsigned char mask = (m_slowInitLine == LineType::KLine) ? 0x01 : 0x00;
+
   // Enable bitbang mode with a single output line (TXD)
   if ((f = ftdi_set_bitmode(&m_ftdi, 0x01, BITMODE_BITBANG)) == 0)
   {
@@ -519,7 +516,7 @@ bool BlockExchangeProtocol::slowInit(uint8_t address, int databits, int parity)
     // data bits
     for (bitindex = 0; bitindex < databits; bitindex++)
     {
-      c = ((1 << bitindex) & address) ? 1 : 0;
+      c = ((1 << bitindex) & address) ? mask : 0;
       if (c)
       {
         parityCount++;
@@ -531,20 +528,20 @@ bool BlockExchangeProtocol::slowInit(uint8_t address, int databits, int parity)
     if (parity == 1)
     {
       // odd parity
-      c = (parityCount % 2) ? 1 : 0;
+      c = (parityCount % 2) ? mask : 0;
       ftdi_write_data(&m_ftdi, &c, 1);
       std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }
     else if (parity == 2)
     {
       // even parity
-      c = (parityCount % 2) ? 0 : 1;
+      c = (parityCount % 2) ? 0 : mask;
       ftdi_write_data(&m_ftdi, &c, 1);
       std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }
 
     // stop bit
-    c = 1;
+    c = mask;
     ftdi_write_data(&m_ftdi, &c, 1);
 
     if (ftdi_disable_bitbang(&m_ftdi) == 0)
@@ -736,7 +733,7 @@ void BlockExchangeProtocol::threadEntry(BlockExchangeProtocol* iface)
 /**
  * Loop that maintains a connection with the ECU. When no particular
  * command is queued, the empty/ACK (09) command is sent as a keepalive.
- * Any other commands are sent, one at a time, and the responses is
+ * Any other commands are sent, one at a time, and the response is
  * collected before the next command is sent.
  */
 void BlockExchangeProtocol::commLoop()
