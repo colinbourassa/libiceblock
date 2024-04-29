@@ -14,7 +14,10 @@ int main(int argc, char** argv)
   printf("fiat9141read using libiceblock v%d.%d.%d\n",
     ver.major, ver.minor, ver.patch);
 
-  Fiat9141 fiat(true);
+  // This is for TRW airbag ECU (p/n 60631206, 46538798, and 60615633)
+  const uint8_t ecuAddr = 0x80;
+  Fiat9141 fiat(4800, LineType::KLine, true);
+
   std::vector<FtdiDeviceInfo> devices = fiat.enumerateFtdiDevices();
   printf("Found %d device(s).\n", devices.size());
 
@@ -26,9 +29,6 @@ int main(int argc, char** argv)
       devices[i].manufacturer.c_str(),
       devices[i].description.c_str());
   }
-
-  // This is for TRW airbag ECU (p/n 60631206, 46538798, and 60615633)
-  const uint8_t ecuAddr = 0x80;
 
   printf("Attempting connection via FTDI %04x/%04x to ECU addr %02x...\n",
     FTDI_VID, FTDI_PID, ecuAddr);

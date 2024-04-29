@@ -14,7 +14,9 @@ int main(int argc, char** argv)
   printf("marelli1afread using libiceblock v%d.%d.%d\n",
     ver.major, ver.minor, ver.patch);
 
-  Marelli1AF marelli(true);
+  const uint8_t ecuAddr = 0x80; // Will likely need to change for an actual 1AF ECU.
+  Marelli1AF marelli(4800, LineType::LLine, true);
+
   std::vector<FtdiDeviceInfo> devices = marelli.enumerateFtdiDevices();
   printf("Found %d device(s).\n", devices.size());
 
@@ -26,10 +28,6 @@ int main(int argc, char** argv)
       devices[i].manufacturer.c_str(),
       devices[i].description.c_str());
   }
-
-  // This is for TRW airbag ECU (p/n 60631206, 46538798, and 60615633)
-  // Note that this will likely need to change for an actual 1AF ECU.
-  const uint8_t ecuAddr = 0x80;
 
   printf("Attempting connection via FTDI %04x/%04x to ECU addr %02x...\n",
     FTDI_VID, FTDI_PID, ecuAddr);

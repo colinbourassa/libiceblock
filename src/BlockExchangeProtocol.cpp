@@ -503,7 +503,7 @@ bool BlockExchangeProtocol::slowInit(uint8_t address, int databits, int parity)
   spdlog::debug("Performing slow init (addr {:02X}, {} data bits, {} parity)...", address, databits, parity);
 
   // TODO: Determine the correct mask for the L-line
-  cosnt unsigned char mask = (m_slowInitLine == LineType::KLine) ? 0x01 : 0x00;
+  const unsigned char mask = (m_slowInitLine == LineType::KLine) ? 0x01 : 0x00;
 
   // Enable bitbang mode with a single output line (TXD)
   if ((f = ftdi_set_bitmode(&m_ftdi, 0x01, BITMODE_BITBANG)) == 0)

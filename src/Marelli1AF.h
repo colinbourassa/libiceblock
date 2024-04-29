@@ -60,8 +60,7 @@ enum class Marelli1AFPartNumberType : uint8_t
 class Marelli1AF : public BlockExchangeProtocol
 {
 public:
-  explicit Marelli1AF(bool verbose);
-  explicit Marelli1AF(int baudRate, bool verbose);
+  explicit Marelli1AF(int baudRate, LineType initLine, bool verbose);
 
   bool activateActuator(uint8_t index, uint8_t parameter);
   bool stopActuator(uint8_t index);

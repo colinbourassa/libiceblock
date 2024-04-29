@@ -14,7 +14,10 @@ int main(int argc, char** argv)
   printf("kwp71read using libiceblock v%d.%d.%d\n",
     ver.major, ver.minor, ver.patch);
 
-  KWP71 kwp(true);
+  // This is appropriate for Bosch Motronic 1.2 p/n 0 261 200 156 (E32 BMW 750iL)
+  const uint8_t ecuAddr = 0x10;
+  KWP71 kwp(4800, LineType::KLine, true);
+
   std::vector<FtdiDeviceInfo> devices = kwp.enumerateFtdiDevices();
   printf("Found %d device(s).\n", devices.size());
 
@@ -26,10 +29,6 @@ int main(int argc, char** argv)
       devices[i].manufacturer.c_str(),
       devices[i].description.c_str());
   }
-
-  // This is appropriate for Bosch Motronic 1.2 p/n 0 261 200 156 (E32 BMW 750iL)
-  kwp.setBaudRate(4800);
-  const uint8_t ecuAddr = 0x10;
 
   printf("Attempting connection via FTDI %04x/%04x to ECU addr %02x...\n",
     FTDI_VID, FTDI_PID, ecuAddr);

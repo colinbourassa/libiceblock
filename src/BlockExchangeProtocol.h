@@ -75,11 +75,6 @@ public:
   bool connectByBusAddr(uint8_t bus, uint8_t addr, uint8_t ecuAddr);
 
   /**
-   * Sets the baud rate that will be used for communicating with the ECU.
-   */
-  void setBaudRate(int baudRate) { m_baudRate = baudRate; }
-
-  /**
    * Stops the block exchange and disconnects.
    */
   void disconnect();
@@ -203,7 +198,7 @@ protected:
    */
   virtual bool doPostKeywordSequence() { return true; }
 
-  int m_baudRate;
+  int m_baudRate = 9600;
   LineType m_slowInitLine = LineType::KLine;
   uint8_t m_sendBlockBuf[256];
   uint8_t m_recvBlockBuf[256];

@@ -1,12 +1,7 @@
 #include "KWP71.h"
 
-KWP71::KWP71(bool verbose) :
-  BlockExchangeProtocol(9600, verbose)
-{
-}
-
-KWP71::KWP71(int baudRate, bool verbose) :
-  BlockExchangeProtocol(baudRate, verbose)
+KWP71::KWP71(int baud, LineType initLine, bool verbose) :
+  BlockExchangeProtocol(baud, initLine, verbose)
 {
 }
 

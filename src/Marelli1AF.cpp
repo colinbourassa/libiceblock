@@ -1,12 +1,7 @@
 #include "Marelli1AF.h"
 
-Marelli1AF::Marelli1AF(bool verbose) :
-  BlockExchangeProtocol(4800, verbose)
-{
-}
-
-Marelli1AF::Marelli1AF(int baudRate, bool verbose) :
-  BlockExchangeProtocol(baudRate, verbose)
+Marelli1AF::Marelli1AF(int baud, LineType initLine, bool verbose) :
+  BlockExchangeProtocol(baud, initLine, verbose)
 {
 }
 

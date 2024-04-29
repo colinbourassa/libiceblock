@@ -41,8 +41,7 @@ enum class KWP71BlockType : uint8_t
 class KWP71 : public BlockExchangeProtocol
 {
 public:
-  explicit KWP71(bool verbose);
-  explicit KWP71(int baudRate, bool verbose);
+  explicit KWP71(int baudRate, LineType initLine, bool verbose);
 
   bool activateActuator(uint8_t index);
   bool readRAM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data);

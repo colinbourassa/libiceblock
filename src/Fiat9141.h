@@ -13,7 +13,7 @@
 class Fiat9141 : public KWP71
 {
 public:
-  Fiat9141(bool verbose);
+  Fiat9141(int baud, LineType initLine, bool verbose);
 
 protected:
   virtual bool bytesEchoedDuringBlockReceipt() const override { return false; }
