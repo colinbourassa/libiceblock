@@ -2,7 +2,6 @@
 #include <libusb.h>
 #include <chrono>
 #include <mutex>
-#include <unistd.h>
 #include <spdlog/spdlog.h>
 #include <spdlog/fmt/fmt.h>
 
@@ -502,8 +501,14 @@ bool BlockExchangeProtocol::slowInit(uint8_t address, int databits, int parity)
 
   spdlog::debug("Performing slow init (addr {:02X}, {} data bits, {} parity)...", address, databits, parity);
 
-  // TODO: Determine the correct mask for the L-line
-  const unsigned char mask = (m_slowInitLine == LineType::KLine) ? 0x01 : 0x00;
+  // The bitbang mask *may* need to change to use the L-line (vs K-line) for
+  // slow init, although this is entirely dependent on the design of the FTDI
+  // cable being used. Testing with a Ross-Tech HEX-USB cable (0403:fa20,
+  // purchased circa 2005) showed that a mask value of 0x01 caused activity on
+  // both the K-line and L-line, suggesting that they are connected internally.
+  // I'm leaving this K/L mask switching mechanism in place for now, and just
+  // setting the mask value to the same (0x01) in either case.
+  const unsigned char mask = (m_slowInitLine == LineType::KLine) ? 0x01 : 0x01;
 
   // Enable bitbang mode with a single output line (TXD)
   if ((f = ftdi_set_bitmode(&m_ftdi, 0x01, BITMODE_BITBANG)) == 0)
