@@ -214,16 +214,18 @@ bool Marelli1AF::stopActuator(uint8_t index)
 
 bool Marelli1AF::readMemoryCell(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data)
 {
-  // TODO: check that the requested number of bytes will fit in
-  // a message block that is within the maximum allowed size
-  CommandBlock cmd;
-  cmd.type = static_cast<uint8_t>(Marelli1AFBlockType::ReadMemoryCell);
-  cmd.payload = std::vector<uint8_t>({
-    static_cast<uint8_t>(addr >> 8),
-    static_cast<uint8_t>(addr & 0xff),
-    numBytes
-  });
-  const bool status = sendCommand(cmd, data);
+  bool status = false;
+  if (numBytes <= maxPayloadSize())
+  {
+    CommandBlock cmd;
+    cmd.type = static_cast<uint8_t>(Marelli1AFBlockType::ReadMemoryCell);
+    cmd.payload = std::vector<uint8_t>({
+      static_cast<uint8_t>(addr >> 8),
+      static_cast<uint8_t>(addr & 0xff),
+      numBytes
+    });
+    status = sendCommand(cmd, data);
+  }
   return status;
 }
 
