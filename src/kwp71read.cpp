@@ -36,6 +36,7 @@ int main(int argc, char** argv)
   if (kwp.connectByDeviceId(FTDI_VID, FTDI_PID, ecuAddr))
   {
     printf("Connected successfully.\n");
+
     std::vector<uint8_t> data;
 
     //const uint8_t bytecount = 252;
@@ -57,6 +58,13 @@ int main(int argc, char** argv)
     {
       printf("Read failed.\n");
       status = -2;
+    }
+
+    const std::vector<std::string>& idStrings = kwp.getIDInfoStrings();
+    printf("Got %d ID string(s):\n", idStrings.size());
+    for (unsigned int s = 0; s < idStrings.size(); s++)
+    {
+      printf("'%s'\n", idStrings.at(s).c_str());
     }
 
     kwp.disconnect();

@@ -80,16 +80,16 @@ public:
   void disconnect();
 
   /**
-   * Sends a request for ID info and populates the response vector. Returns true
-   * when a response was received within the timeout; false otherwise.
-   */
-  bool requestIDInfo(std::vector<std::string>& idResponse);
-
-  /**
    * Sends the provided command block to the ECU and populates the vector with
    * any response data. Returns true when successful; false otherwise.
    */
   bool sendCommand(CommandBlock cmd, std::vector<uint8_t>& response);
+
+  /**
+   * Returns a reference to a collection of any ID strings that were received
+   * from the ECU immediately after the slow-init sequence.
+   */
+  const std::vector<std::string>& getIDInfoStrings() const;
 
   /**
    * Queries the USB subsystem for any devices whose VID/PID match known values
@@ -168,6 +168,11 @@ protected:
   virtual bool lastReceivedBlockWasEmpty() const = 0;
 
   /**
+   * Returns true if the last received block contained ASCII string information.
+   */
+  virtual bool lastReceivedBlockWasASCII() const = 0;
+
+  /**
    * Returns true if the last received block was a NACK or other negative
    * response to a request.
    */
@@ -205,6 +210,8 @@ protected:
   uint8_t m_lastUsedSeqNum = 0;
   uint8_t m_lastReceivedBlockTitle = 0;
   std::vector<uint8_t> m_lastReceivedPayload;
+  std::string m_lastReceivedASCII;
+  std::vector<std::string> m_idInfoStrings;
 
   bool recvBlock(std::chrono::milliseconds timeout = std::chrono::milliseconds(1000));
   bool sendBlock(bool sendBufIsPrepopulated = false);

@@ -90,6 +90,10 @@ protected:
   virtual bool lastReceivedBlockWasEmpty() const override;
   virtual bool lastReceivedBlockWasNack() const override;
 
+  // NOTE: Check to see whether there are any ASCII string data blocks that
+  // the protocol supports. If not, this can left as-is (always return false).
+  virtual bool lastReceivedBlockWasASCII() const override { return false; }
+
   /**
    * NOTE: This -- and other parameters of this protocol -- may be
    * different for non-engine implementations of 1AF (e.g. for the

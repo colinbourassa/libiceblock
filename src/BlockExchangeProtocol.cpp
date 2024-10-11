@@ -650,23 +650,6 @@ bool BlockExchangeProtocol::readAckKeywordBytes()
 }
 
 /**
- * Queues a command to read the ID information from the ECU, which is returned
- * as a collection of strings.
- */
-bool BlockExchangeProtocol::requestIDInfo(std::vector<std::string>& idResponse)
-{
-  std::vector<uint8_t> responseData;
-  CommandBlock cmd;
-  cmd.type = blockTitleForRequestID();
-  cmd.payload = {};
-  const bool status = sendCommand(cmd, responseData);
-
-  // TODO: parse the byte array payload into strings
-
-  return status;
-}
-
-/**
  * Sends the provided command the ECU at the next opportunity (i.e. when the ECU
  * is finished sending data from any previous command), and waits to receive the
  * response.
@@ -722,9 +705,19 @@ void BlockExchangeProtocol::processReceivedBlock()
     blockPayloadStartPos = 2;
   }
 
+  if (lastReceivedBlockWasASCII())
+  {
+    m_lastReceivedASCII = std::string(reinterpret_cast<char*>(&m_recvBlockBuf[blockPayloadStartPos]), payloadLen);
+  }
+
   m_lastReceivedPayload.insert(m_lastReceivedPayload.end(),
                                &m_recvBlockBuf[blockPayloadStartPos],
                                &m_recvBlockBuf[blockPayloadStartPos + payloadLen]);
+}
+
+const std::vector<std::string>& BlockExchangeProtocol::getIDInfoStrings() const
+{
+  return m_idInfoStrings;
 }
 
 /**

@@ -15,6 +15,12 @@ bool KWP71::doPostKeywordSequence()
       // ACK until the ECU sends its first empty block (after the ID info)
       if (m_lastReceivedBlockTitle != static_cast<uint8_t>(KWP71BlockType::Empty))
       {
+        // The ECU is (probably) sending identification information as a series of
+        // ASCII strings. Save these so that the application can request them later.
+        if (lastReceivedBlockWasASCII())
+        {
+          m_idInfoStrings.push_back(m_lastReceivedASCII);
+        }
         sendBlock();
       }
     }
@@ -37,6 +43,11 @@ bool KWP71::lastReceivedBlockWasNack() const
 {
   return ((m_lastReceivedBlockTitle == static_cast<uint8_t>(KWP71BlockType::NACK)) ||
           (m_lastReceivedBlockTitle == static_cast<uint8_t>(KWP71BlockType::NotSupported)));
+}
+
+bool KWP71::lastReceivedBlockWasASCII() const
+{
+  return (m_lastReceivedBlockTitle == static_cast<uint8_t>(KWP71BlockType::ASCIIString));
 }
 
 /**
