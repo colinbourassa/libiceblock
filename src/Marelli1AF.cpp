@@ -42,12 +42,17 @@ bool Marelli1AF::checkValidityOfBlockAndPayload(uint8_t title, const std::vector
   switch(type)
   {
   case Marelli1AFBlockType::WriteRAM:
+    // Expect a one-byte "value code" (fixed at 0x0B according to the spec),
+    // plus five bytes of the security code (which seems to be the only piece of
+    // data that the official 1AF protocol allows being written.)
     status = (payload.size() == 6);
     break;
   case Marelli1AFBlockType::ReadMemoryCell:
+    // Expect a 16-bit address plus an 8-bit byte count
     status = (payload.size() == 3);
     break;
   case Marelli1AFBlockType::ActivateActuator:
+    // Expect one byte for the component code, and one byte for a parameter
     status = (payload.size() == 2);
     break;
   case Marelli1AFBlockType::ReadIDCode:
