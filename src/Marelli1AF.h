@@ -52,9 +52,9 @@ enum class Marelli1AFPartNumberType : uint8_t
  * sequence.
  *
  * Based on its spec (FIAT document 3.00601), this protocol seems to have been
- * designed specifically for four-cylinder engine ECU diagnostics. However, this
- * protocol (or a close relative) also appears to have been used for the Marelli
- * F1 gearbox controller on the Ferrari 355 F1. Some of the protocol's engine-
+ * designed specifically for four-cylinder engine ECU diagnostics. However, a
+ * variant of this protocol also appears to have been used for the Marelli F1
+ * gearbox controller on the Ferrari 355 F1. Some of the protocol's engine-
  * specific features must be unsupported in this configuration.
  */
 class Marelli1AF : public BlockExchangeProtocol
