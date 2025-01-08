@@ -1,3 +1,5 @@
+#pragma once
+
 #include "KWP71.h"
 
 /**

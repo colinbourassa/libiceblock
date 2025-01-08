@@ -1,3 +1,5 @@
+#pragma once
+
 #include "BlockExchangeProtocol.h"
 
 enum class Marelli1AFBlockType : uint8_t
