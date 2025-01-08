@@ -222,13 +222,14 @@ else()
 endif()
 
 #
-# install the public headers
+# install the headers
 #
-install (FILES "${SOURCE_SUBDIR}/KWP71.h"
+install (FILES "${SOURCE_SUBDIR}/BlockExchangeProtocol.h"
+               "${SOURCE_SUBDIR}/KWP71.h"
                "${SOURCE_SUBDIR}/Fiat9141.h"
                "${SOURCE_SUBDIR}/Marelli1AF.h"
                "${CMAKE_BINARY_DIR}/${LIBNAME}_version.h"
-         DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+         DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${LIBNAME}"
          PERMISSIONS
           OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ)
 
