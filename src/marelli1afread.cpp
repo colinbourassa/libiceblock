@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <cstdint>
 #include "Marelli1AF.h"
+#include "ftdi_enumerator.h"
 #include "library_info.h"
 
 #define FTDI_VID 0x0403
@@ -17,7 +18,7 @@ int main(int argc, char** argv)
   const uint8_t ecuAddr = 0x80; // Will likely need to change for an actual 1AF ECU.
   Marelli1AF marelli(4800, LineType::LLine, true);
 
-  std::vector<FtdiDeviceInfo> devices = marelli.enumerateFtdiDevices();
+  std::vector<FtdiDeviceInfo> devices = enumerateFtdiDevices();
   printf("Found %d device(s).\n", devices.size());
 
   for (int i = 0; i < devices.size(); i++)

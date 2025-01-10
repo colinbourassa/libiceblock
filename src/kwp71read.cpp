@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <cstdint>
 #include "KWP71.h"
+#include "ftdi_enumerator.h"
 #include "library_info.h"
 
 #define FTDI_VID 0x0403
@@ -18,7 +19,7 @@ int main(int argc, char** argv)
   const uint8_t ecuAddr = 0x10;
   KWP71 kwp(4800, LineType::KLine, true);
 
-  std::vector<FtdiDeviceInfo> devices = kwp.enumerateFtdiDevices();
+  std::vector<FtdiDeviceInfo> devices = enumerateFtdiDevices();
   printf("Found %d device(s).\n", devices.size());
 
   for (int i = 0; i < devices.size(); i++)

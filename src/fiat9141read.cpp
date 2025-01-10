@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <cstdint>
 #include "Fiat9141.h"
+#include "ftdi_enumerator.h"
 #include "library_info.h"
 
 #define FTDI_VID 0x0403
@@ -18,7 +19,7 @@ int main(int argc, char** argv)
   const uint8_t ecuAddr = 0x80;
   Fiat9141 fiat(4800, LineType::KLine, true);
 
-  std::vector<FtdiDeviceInfo> devices = fiat.enumerateFtdiDevices();
+  std::vector<FtdiDeviceInfo> devices = enumerateFtdiDevices();
   printf("Found %d device(s).\n", devices.size());
 
   for (int i = 0; i < devices.size(); i++)

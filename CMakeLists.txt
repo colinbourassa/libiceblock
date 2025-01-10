@@ -58,6 +58,8 @@ configure_file ("${SOURCE_SUBDIR}/${LIBNAME}_version.h.in"
 include_directories ("${CMAKE_SOURCE_DIR}/src" "${CMAKE_BINARY_DIR}" "${LIBRARY_USB_INCLUDE_DIRS}")
 
 set (ALL_SOURCE_FILES
+       "${SOURCE_SUBDIR}/ftdi_enumerator.cpp"
+       "${SOURCE_SUBDIR}/ftdi_enumerator.h"
        "${SOURCE_SUBDIR}/BlockExchangeProtocol.cpp"
        "${SOURCE_SUBDIR}/BlockExchangeProtocol.h"
        "${SOURCE_SUBDIR}/Fiat9141.cpp"
