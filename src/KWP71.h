@@ -45,14 +45,11 @@ class KWP71 : public BlockExchangeProtocol
 public:
   explicit KWP71(int baudRate, LineType initLine, bool verbose);
 
-  bool activateActuator(uint8_t index);
-  bool readRAM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data);
-  bool readROM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data);
-  bool readEEPROM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data);
-  bool writeRAM(uint16_t addr, const std::vector<uint8_t>& data);
-  bool writeEEPROM(uint16_t addr, const std::vector<uint8_t>& data);
-  bool readFaultCodes(std::vector<uint8_t>& data);
-  bool eraseFaultCodes();
+  virtual bool activateActuator(uint8_t id, const std::vector<uint8_t>& paramData) override;
+  virtual bool readMemory(MemoryType type, uint16_t addr, uint16_t numBytes, std::vector<uint8_t>& data) override;
+  virtual bool writeMemory(MemoryType type, uint16_t addr, const std::vector<uint8_t>& data) override;
+  virtual bool readFaultCodes(std::vector<uint8_t>& data) override;
+  virtual bool eraseFaultCodes() override;
 
 protected:
   virtual bool bytesEchoedDuringBlockReceipt() const override { return true; }
@@ -74,5 +71,12 @@ protected:
   virtual bool doPostKeywordSequence() override;
   virtual bool isValidCommandFromTester(uint8_t type) const override;
   virtual bool checkValidityOfBlockAndPayload(uint8_t title, const std::vector<uint8_t>& payload) const override;
+
+private:
+  bool readRAM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data);
+  bool readROM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data);
+  bool readEEPROM(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data);
+  bool writeRAM(uint16_t addr, const std::vector<uint8_t>& data);
+  bool writeEEPROM(uint16_t addr, const std::vector<uint8_t>& data);
 };
 

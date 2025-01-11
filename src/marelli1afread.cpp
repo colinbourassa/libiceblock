@@ -38,7 +38,7 @@ int main(int argc, char** argv)
     printf("Connected successfully.\n");
     std::vector<uint8_t> data;
 
-    if (marelli.readMemoryCell(0x0000, 8, data))
+    if (marelli.readMemory(MemoryType::Unspecified, 0x0000, 8, data))
     {
       printf("Read %d bytes.\n", data.size());
       for (int index = 0; index < data.size(); index++)

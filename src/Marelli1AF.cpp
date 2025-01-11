@@ -197,13 +197,17 @@ bool Marelli1AF::doPostKeywordSequence()
   return status;
 }
 
-bool Marelli1AF::activateActuator(uint8_t index, uint8_t parameter)
+bool Marelli1AF::activateActuator(uint8_t index, const std::vector<uint8_t>& paramData)
 {
-  std::vector<uint8_t> data;
+  // Prepare a single vector containing both the actuator ID and the parameter data
+  std::vector<uint8_t> sendData = paramData;
+  sendData.insert(sendData.begin(), index);
+
+  std::vector<uint8_t> recvData;
   CommandBlock cmd;
   cmd.type = static_cast<uint8_t>(Marelli1AFBlockType::ActivateActuator);
-  cmd.payload = std::vector<uint8_t>({index, parameter});
-  const bool status = sendCommand(cmd, data);
+  cmd.payload = sendData;
+  const bool status = sendCommand(cmd, recvData);
   return status;
 }
 
@@ -217,28 +221,43 @@ bool Marelli1AF::stopActuator(uint8_t index)
   return status;
 }
 
-bool Marelli1AF::readMemoryCell(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data)
+/**
+ * Reads from ECU memory. Note that the 1AF specification provides a mechanism
+ * for reading from RAM/ROM/EEPROM ("Read Memory Cell"), though it does not
+ * provide a means to differentiate between these different memory devices when
+ * using that function. We will assume that any differentiation between devices
+ * is done by the ECU's internal address decoding.
+ * The only other
+ */
+bool Marelli1AF::readMemory(MemoryType type, uint16_t addr, uint16_t numBytes, std::vector<uint8_t>& data)
 {
   bool status = false;
-  if (numBytes <= maxPayloadSize())
+
+  if (type == MemoryType::Fault)
+  {
+    CommandBlock cmd;
+    cmd.type = static_cast<uint8_t>(Marelli1AFBlockType::ReadErrorMemory);
+    status = sendCommand(cmd, data);
+  }
+  else if (numBytes <= maxPayloadSize()) // treat all other read types the same way
   {
     CommandBlock cmd;
     cmd.type = static_cast<uint8_t>(Marelli1AFBlockType::ReadMemoryCell);
     cmd.payload = std::vector<uint8_t>({
       static_cast<uint8_t>(addr >> 8),
       static_cast<uint8_t>(addr & 0xff),
-      numBytes
-    });
+      static_cast<uint8_t>(numBytes)
+      });
     status = sendCommand(cmd, data);
   }
   return status;
 }
 
-bool Marelli1AF::readValue(uint8_t valueCode, std::vector<uint8_t>& valueSequence)
+bool Marelli1AF::readStoredValue(uint8_t id, std::vector<uint8_t>& valueSequence)
 {
   CommandBlock cmd;
   cmd.type = static_cast<uint8_t>(Marelli1AFBlockType::ReadValue);
-  cmd.payload = std::vector<uint8_t>({valueCode});
+  cmd.payload = std::vector<uint8_t>({id});
   const bool status = sendCommand(cmd, valueSequence);
   return status;
 }
@@ -284,20 +303,27 @@ bool Marelli1AF::writeSecurityCode(const std::vector<uint8_t>& securityCode)
   return status;
 }
 
-bool Marelli1AF::readErrorMemory(std::vector<uint8_t>& data)
+bool Marelli1AF::readIDCode(std::vector<std::vector<uint8_t>>& idString)
 {
-  CommandBlock cmd;
-  cmd.type = static_cast<uint8_t>(Marelli1AFBlockType::ReadErrorMemory);
-  const bool status = sendCommand(cmd, data);
-  return status;
-}
+  // TODO: Ensure idString contains a vector at each position before attempting to use the [] operator to access them
 
-bool Marelli1AF::readIDCode(Marelli1AFPartNumberType type, std::vector<uint8_t>& idString)
-{
   CommandBlock cmd;
   cmd.type = static_cast<uint8_t>(Marelli1AFBlockType::ReadIDCode);
-  cmd.payload.push_back(static_cast<uint8_t>(type));
-  const bool status = sendCommand(cmd, idString);
+  cmd.payload = { static_cast<uint8_t>(Marelli1AFPartNumberType::MarelliBolognaDrawingNumber) };
+  bool status = sendCommand(cmd, idString[0]);
+
+  if (status)
+  {
+    cmd.payload = { static_cast<uint8_t>(Marelli1AFPartNumberType::HWSWNumber) };
+    status = sendCommand(cmd, idString[1]);
+  }
+
+  if (status)
+  {
+    cmd.payload = { static_cast<uint8_t>(Marelli1AFPartNumberType::FIATDrawingNumber) };
+    status = sendCommand(cmd, idString[2]);
+  }
+
   return status;
 }
 
@@ -310,7 +336,7 @@ bool Marelli1AF::readErrorValue(uint8_t code, std::vector<uint8_t>& data)
   return status;
 }
 
-bool Marelli1AF::clearErrorMemory()
+bool Marelli1AF::eraseFaultCodes()
 {
   std::vector<uint8_t> data;
   CommandBlock cmd;

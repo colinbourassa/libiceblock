@@ -97,7 +97,7 @@ bool KWP71::checkValidityOfBlockAndPayload(uint8_t title, const std::vector<uint
 /**
  * Sends a command to activate the specified actuator.
  */
-bool KWP71::activateActuator(uint8_t index)
+bool KWP71::activateActuator(uint8_t index, const std::vector<uint8_t>& paramData)
 {
   std::vector<uint8_t> data;
   CommandBlock cmd;
@@ -133,6 +133,48 @@ bool KWP71::eraseFaultCodes()
   CommandBlock cmd;
   cmd.type = static_cast<uint8_t>(KWP71BlockType::EraseTroubleCodes);
   const bool status = sendCommand(cmd, data);
+  return status;
+}
+
+/**
+ * Reads the requested number of bytes from the specified memory device and address.
+ * Only reads from RAM, ROM, and EEPROM are supported.
+ */
+bool KWP71::readMemory(MemoryType type, uint16_t addr, uint16_t numBytes, std::vector<uint8_t>& data)
+{
+  bool status = false;
+  if (type == MemoryType::RAM)
+  {
+    status = readRAM(addr, static_cast<uint8_t>(numBytes), data);
+  }
+  else if (type == MemoryType::ROM)
+  {
+    status = readROM(addr, static_cast<uint8_t>(numBytes), data);
+  }
+  else if (type == MemoryType::EEPROM)
+  {
+    status = readEEPROM(addr, static_cast<uint8_t>(numBytes), data);
+  }
+
+  return status;
+}
+
+/**
+ * Writes the provided data to the specified memory device and address.
+ * Only writes to RAM and EEPROM are supported.
+ */
+bool KWP71::writeMemory(MemoryType type, uint16_t addr, const std::vector<uint8_t>& data)
+{
+  bool status = false;
+  if (type == MemoryType::RAM)
+  {
+    status = writeRAM(addr, data);
+  }
+  else if (type == MemoryType::EEPROM)
+  {
+    status == writeEEPROM(addr, data);
+  }
+
   return status;
 }
 

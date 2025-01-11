@@ -30,6 +30,20 @@ enum class BlockTrailerType
 };
 
 /**
+ * Differentiates the types of volatile and nonvolatile storage that may be
+ * found within an ECU. The "Fault" value is provided to accommodate ECUs that
+ * use separate storage for fault/error data.
+ */
+enum class MemoryType
+{
+  Unspecified,
+  RAM,
+  ROM,
+  EEPROM,
+  Fault
+};
+
+/**
  * This class forms the basis of "block exchange" diagnostic protocols, which
  * all involve the ECU and test equipment taking turns exchanging message blocks.
  * The initial connection is made with a "slow init" sequence, in which a
@@ -71,6 +85,74 @@ public:
    * from the ECU immediately after the slow-init sequence.
    */
   const std::vector<std::string>& getIDInfoStrings() const;
+
+  /**
+   * Sends a command to activate an actuator that is driven by the ECU. Some
+   * protocols may require additional parameter data beyond the activator ID.
+   */
+  virtual bool activateActuator(uint8_t id, const std::vector<uint8_t>& paramData) { return false; }
+
+  /**
+   * Sends a command to stop a previously activated actuator. Not all protocols
+   * support this; some assume that the ECU will automatically stop any
+   * actuator automatically.
+   */
+  virtual bool stopActuator(uint8_t id) { return false; }
+
+  /**
+   * Reads the specified number of bytes from the address within the indicated
+   * memory device. Different protocols will support different devices, and
+   * there may be additional restrictions on the devices per ECU implementation.
+   */
+  virtual bool readMemory(MemoryType type, uint16_t addr, uint16_t numBytes, std::vector<uint8_t>& data) { return false; }
+
+  /**
+   * Writes the provided data to the indicated device and address.
+   */
+  virtual bool writeMemory(MemoryType type, uint16_t addr, const std::vector<uint8_t>& data) { return false; }
+
+  /**
+   * Reads a stored parametric value. This data is considered to be managed and
+   * accessed separately from the normal RAM/ROM address space. Marelli 1AF
+   * supports this function, but other protocols may not.
+   */
+  virtual bool readStoredValue(uint8_t id, std::vector<uint8_t>& data) { return false; }
+
+  /**
+   * Reads a sampled value from one or more ADC channels.
+   */
+  virtual bool readADCChannel(const std::vector<uint8_t>& channelList,
+                              std::vector<uint8_t>& channelValues) { return false; }
+
+  /**
+   * Reads a "snapshot" page, which is essentially a fixed-size block of parametric
+   * data that is given an index. Supported by Marelli 1AF.
+   */
+  virtual bool readSnapshot(uint8_t index, std::vector<uint8_t>& snapshotData) { return false; }
+
+  /**
+   * Reads fault code data. This is used when such data is read using a special
+   * ECU function that is separate from normal memory access.
+   */
+  virtual bool readFaultCodes(std::vector<uint8_t>& data) { return false; }
+
+  /**
+   * Reads byte strings that generally contain ASCII representations of ECU
+   * hardware and firmware revision numbers.
+   * TODO: Implement this for KWP71, which is currently storing this data in m_idInfoStrings.
+   */
+  virtual bool readIDCode(std::vector<std::vector<uint8_t>>& idStrings) { return false; }
+
+  /**
+   * Clears any fault code data.
+   */
+  virtual bool eraseFaultCodes() { return false; }
+
+  /**
+   * Writes a security code to the ECU. This is used for protocols that have
+   * security-sensitive functions.
+   */
+  virtual bool writeSecurityCode(const std::vector<uint8_t>& securityCode) { return false; }
 
 protected:
   /**

@@ -64,18 +64,21 @@ class Marelli1AF : public BlockExchangeProtocol
 public:
   explicit Marelli1AF(int baudRate, LineType initLine, bool verbose);
 
-  bool activateActuator(uint8_t index, uint8_t parameter);
-  bool stopActuator(uint8_t index);
-  bool readMemoryCell(uint16_t addr, uint8_t numBytes, std::vector<uint8_t>& data);
-  bool readValue(uint8_t valueCode, std::vector<uint8_t>& valueSequence);
-  bool readSnapshot(uint8_t snapshotCode, std::vector<uint8_t>& snapshotData);
-  bool readADCChannel(const std::vector<uint8_t>& channelList,
-                      std::vector<uint8_t>& channelValues);
-  bool writeSecurityCode(const std::vector<uint8_t>& securityCode);
-  bool readErrorMemory(std::vector<uint8_t>& data);
-  bool readIDCode(Marelli1AFPartNumberType type, std::vector<uint8_t>& idString);
+  virtual bool activateActuator(uint8_t id, const std::vector<uint8_t>& paramData) override;
+  virtual bool stopActuator(uint8_t index) override;
+  virtual bool readStoredValue(uint8_t id, std::vector<uint8_t>& data) override;
+  virtual bool readMemory(MemoryType type, uint16_t addr, uint16_t numBytes, std::vector<uint8_t>& data) override;
+  virtual bool readSnapshot(uint8_t snapshotCode, std::vector<uint8_t>& snapshotData) override;
+  virtual bool readADCChannel(const std::vector<uint8_t>& channelList,
+                              std::vector<uint8_t>& channelValues) override;
+  virtual bool readIDCode(std::vector<std::vector<uint8_t>>& idString) override;
+  virtual bool eraseFaultCodes() override;
+  virtual bool writeSecurityCode(const std::vector<uint8_t>& securityCode) override;
+
+  // TODO: This is an oddball protocol function that doesn't have an analogue
+  // in KWP71 or FIAT9141. We might want to just leave it here rather than make
+  // it virtual in the base.
   bool readErrorValue(uint8_t code, std::vector<uint8_t>& data);
-  bool clearErrorMemory();
 
 protected:
   virtual bool bytesEchoedDuringBlockReceipt() const override { return false; }
