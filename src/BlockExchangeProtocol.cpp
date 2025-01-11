@@ -704,17 +704,12 @@ void BlockExchangeProtocol::processReceivedBlock()
     blockPayloadStartPos = 2;
   }
 
-  if (lastReceivedBlockWasASCII())
-  {
-    m_lastReceivedASCII = std::string(reinterpret_cast<char*>(&m_recvBlockBuf[blockPayloadStartPos]), payloadLen);
-  }
-
   m_lastReceivedPayload.insert(m_lastReceivedPayload.end(),
                                &m_recvBlockBuf[blockPayloadStartPos],
                                &m_recvBlockBuf[blockPayloadStartPos + payloadLen]);
 }
 
-const std::vector<std::string>& BlockExchangeProtocol::getIDInfoStrings() const
+const std::vector<std::vector<uint8_t>>& BlockExchangeProtocol::getIDInfoStrings() const
 {
   return m_idInfoStrings;
 }

@@ -33,7 +33,7 @@ enum class KWP71BlockType : uint8_t
   ParametricData    = 0xEC,
   EEPROMContent     = 0xEF,
   Snapshot          = 0xF4,
-  ASCIIString       = 0xF6,
+  InfoString        = 0xF6,
   ADCValue          = 0xFB,
   BinaryData        = 0xFC,
   RAMContent        = 0xFD,
@@ -65,7 +65,6 @@ protected:
   virtual uint8_t blockTitleForRequestID() const override { return static_cast<uint8_t>(KWP71BlockType::RequestID); }
   virtual bool lastReceivedBlockWasEmpty() const override;
   virtual bool lastReceivedBlockWasNack() const override;
-  virtual bool lastReceivedBlockWasASCII() const override;
   virtual unsigned int maxPayloadSize() const override { return 252; }
 
   virtual bool doPostKeywordSequence() override;

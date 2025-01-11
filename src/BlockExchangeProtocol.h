@@ -84,7 +84,7 @@ public:
    * Returns a reference to a collection of any ID strings that were received
    * from the ECU immediately after the slow-init sequence.
    */
-  const std::vector<std::string>& getIDInfoStrings() const;
+  const std::vector<std::vector<uint8_t>>& getIDInfoStrings() const;
 
   /**
    * Sends a command to activate an actuator that is driven by the ECU. Some
@@ -223,11 +223,6 @@ protected:
   virtual bool lastReceivedBlockWasEmpty() const = 0;
 
   /**
-   * Returns true if the last received block contained ASCII string information.
-   */
-  virtual bool lastReceivedBlockWasASCII() const = 0;
-
-  /**
    * Returns true if the last received block was a NACK or other negative
    * response to a request.
    */
@@ -265,8 +260,7 @@ protected:
   uint8_t m_lastUsedSeqNum = 0;
   uint8_t m_lastReceivedBlockTitle = 0;
   std::vector<uint8_t> m_lastReceivedPayload;
-  std::string m_lastReceivedASCII;
-  std::vector<std::string> m_idInfoStrings;
+  std::vector<std::vector<uint8_t>> m_idInfoStrings;
 
   bool recvBlock(std::chrono::milliseconds timeout = std::chrono::milliseconds(1000));
   bool sendBlock(bool sendBufIsPrepopulated = false);

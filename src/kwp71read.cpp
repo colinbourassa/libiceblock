@@ -61,11 +61,12 @@ int main(int argc, char** argv)
       status = -2;
     }
 
-    const std::vector<std::string>& idStrings = kwp.getIDInfoStrings();
+    const std::vector<std::vector<uint8_t>>& idStrings = kwp.getIDInfoStrings();
     printf("Got %d ID string(s):\n", idStrings.size());
-    for (unsigned int s = 0; s < idStrings.size(); s++)
+    for (unsigned int index = 0; index < idStrings.size(); index++)
     {
-      printf("'%s'\n", idStrings.at(s).c_str());
+      std::string s(reinterpret_cast<const char*>(idStrings.at(index).data()), idStrings.at(index).size());
+      printf("'%s'\n", s.c_str());
     }
 
     kwp.disconnect();

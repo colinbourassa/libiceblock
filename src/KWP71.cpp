@@ -17,10 +17,7 @@ bool KWP71::doPostKeywordSequence()
       {
         // The ECU is (probably) sending identification information as a series of
         // ASCII strings. Save these so that the application can request them later.
-        if (lastReceivedBlockWasASCII())
-        {
-          m_idInfoStrings.push_back(m_lastReceivedASCII);
-        }
+        m_idInfoStrings.push_back(m_lastReceivedPayload);
         sendBlock();
       }
     }
@@ -43,11 +40,6 @@ bool KWP71::lastReceivedBlockWasNack() const
 {
   return ((m_lastReceivedBlockTitle == static_cast<uint8_t>(KWP71BlockType::NACK)) ||
           (m_lastReceivedBlockTitle == static_cast<uint8_t>(KWP71BlockType::NotSupported)));
-}
-
-bool KWP71::lastReceivedBlockWasASCII() const
-{
-  return (m_lastReceivedBlockTitle == static_cast<uint8_t>(KWP71BlockType::ASCIIString));
 }
 
 /**
