@@ -18,6 +18,7 @@ struct CommandBlock
 
 enum class LineType
 {
+  None,
   KLine,
   LLine
 };
