@@ -40,9 +40,9 @@ int main(int argc, char** argv)
 
     std::vector<uint8_t> data;
 
-    //const uint8_t bytecount = 252;
-    //if (kwp.readROM(0x0000, bytecount, data))
-    if (kwp.readFaultCodes(data))
+    const uint8_t bytecount = 252;
+    if (kwp.readMemory(MemoryType::RAM, 0x0000, bytecount, data))
+    //if (kwp.readFaultCodes(data))
     {
       printf("Read %d bytes.\n", data.size());
       for (int index = 0; index < data.size(); index++)
