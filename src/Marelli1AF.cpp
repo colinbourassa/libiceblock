@@ -305,7 +305,7 @@ bool Marelli1AF::writeSecurityCode(const std::vector<uint8_t>& securityCode)
 
 bool Marelli1AF::readIDCode(std::vector<std::vector<uint8_t>>& idString)
 {
-  // TODO: Ensure idString contains a vector at each position before attempting to use the [] operator to access them
+  idString.resize(3);
 
   CommandBlock cmd;
   cmd.type = static_cast<uint8_t>(Marelli1AFBlockType::ReadIDCode);

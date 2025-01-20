@@ -61,12 +61,15 @@ int main(int argc, char** argv)
       status = -2;
     }
 
-    const std::vector<std::vector<uint8_t>>& idStrings = kwp.getIDInfoStrings();
-    printf("Got %d ID string(s):\n", idStrings.size());
-    for (unsigned int index = 0; index < idStrings.size(); index++)
+    std::vector<std::vector<uint8_t>> idStrings;
+    if (kwp.readIDCode(idStrings))
     {
-      std::string s(reinterpret_cast<const char*>(idStrings.at(index).data()), idStrings.at(index).size());
-      printf("'%s'\n", s.c_str());
+      printf("Got %d ID string(s):\n", idStrings.size());
+      for (unsigned int index = 0; index < idStrings.size(); index++)
+      {
+        std::string s(reinterpret_cast<const char*>(idStrings.at(index).data()), idStrings.at(index).size());
+        printf("'%s'\n", s.c_str());
+      }
     }
 
     kwp.disconnect();

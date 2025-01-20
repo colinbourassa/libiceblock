@@ -709,11 +709,6 @@ void BlockExchangeProtocol::processReceivedBlock()
                                &m_recvBlockBuf[blockPayloadStartPos + payloadLen]);
 }
 
-const std::vector<std::vector<uint8_t>>& BlockExchangeProtocol::getIDInfoStrings() const
-{
-  return m_idInfoStrings;
-}
-
 /**
  * Thread entry point, which calls the main communication loop function.
  */

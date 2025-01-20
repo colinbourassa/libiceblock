@@ -82,12 +82,6 @@ public:
   bool sendCommand(CommandBlock cmd, std::vector<uint8_t>& response);
 
   /**
-   * Returns a reference to a collection of any ID strings that were received
-   * from the ECU immediately after the slow-init sequence.
-   */
-  const std::vector<std::vector<uint8_t>>& getIDInfoStrings() const;
-
-  /**
    * Sends a command to activate an actuator that is driven by the ECU. Some
    * protocols may require additional parameter data beyond the activator ID.
    */
@@ -140,7 +134,6 @@ public:
   /**
    * Reads byte strings that generally contain ASCII representations of ECU
    * hardware and firmware revision numbers.
-   * TODO: Implement this for KWP71, which is currently storing this data in m_idInfoStrings.
    */
   virtual bool readIDCode(std::vector<std::vector<uint8_t>>& idStrings) { return false; }
 

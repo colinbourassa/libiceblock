@@ -18,6 +18,7 @@ bool KWP71::doPostKeywordSequence()
         // The ECU is (probably) sending identification information as a series of
         // ASCII strings. Save these so that the application can request them later.
         m_idInfoStrings.push_back(m_lastReceivedPayload);
+        m_lastReceivedPayload.clear();
         sendBlock();
       }
     }
@@ -328,5 +329,14 @@ bool KWP71::isValidCommandFromTester(uint8_t cmd) const
   default:
     return false;
   }
+}
+
+/**
+ * Returns the ID strings that were received immediately after the init sequence.
+ */
+bool KWP71::readIDCode(std::vector<std::vector<uint8_t>>& idStrings)
+{
+  idStrings = m_idInfoStrings;
+  return true;
 }
 

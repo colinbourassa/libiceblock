@@ -50,6 +50,7 @@ public:
   virtual bool writeMemory(MemoryType type, uint16_t addr, const std::vector<uint8_t>& data) override;
   virtual bool readFaultCodes(std::vector<uint8_t>& data) override;
   virtual bool eraseFaultCodes() override;
+  virtual bool readIDCode(std::vector<std::vector<uint8_t>>& idStrings) override;
 
 protected:
   virtual bool bytesEchoedDuringBlockReceipt() const override { return true; }
