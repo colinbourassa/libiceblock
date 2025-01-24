@@ -230,6 +230,8 @@ install (FILES "${SOURCE_SUBDIR}/BlockExchangeProtocol.h"
                "${SOURCE_SUBDIR}/KWP71.h"
                "${SOURCE_SUBDIR}/Fiat9141.h"
                "${SOURCE_SUBDIR}/Marelli1AF.h"
+               "${SOURCE_SUBDIR}/ftdi_enumerator.h"
+               "${SOURCE_SUBDIR}/library_info.h"
                "${CMAKE_BINARY_DIR}/${LIBNAME}_version.h"
          DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${LIBNAME}"
          PERMISSIONS
