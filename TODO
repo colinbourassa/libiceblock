@@ -1,0 +1,3 @@
+- Test under conditions that might vary the timing enough to disrupt the 5-baud init sequence
+  (or other communications), such as running over an ssh connection.
+
