@@ -17,6 +17,8 @@ protected:
    */
   virtual bool useSequenceNums() const = 0;
 
+  virtual uint8_t lastByteIndexOfSendBlock() const override { return m_sendBlockBuf[0]; }
+  virtual uint8_t lastByteIndexOfReceiveBlock() const override { return m_recvBlockBuf[0]; }
   virtual bool setBlockSections(uint8_t blockTitle, std::vector<uint8_t>& payload) override;
   virtual void setBlockTitle(uint8_t title) override;
   virtual void setBlockPayload(const std::vector<uint8_t>& payload) override;

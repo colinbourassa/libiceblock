@@ -27,7 +27,6 @@ bool Bilstein::checkValidityOfBlockAndPayload(uint8_t title, const std::vector<u
 
 /**
  * Reads the requested number of bytes from the specified memory device and address.
- * Only reads from RAM, ROM, and EEPROM are supported.
  */
 bool Bilstein::readMemory(MemoryType type, uint16_t addr, uint16_t /*numBytes*/, std::vector<uint8_t>& data)
 {
@@ -44,6 +43,9 @@ bool Bilstein::readMemory(MemoryType type, uint16_t addr, uint16_t /*numBytes*/,
   return status;
 }
 
+/**
+ * Writes the provided data to the specified memory device and address.
+ */
 bool Bilstein::writeMemory(MemoryType type, uint16_t addr, const std::vector<uint8_t>& data)
 {
   bool status = false;
@@ -68,8 +70,6 @@ bool Bilstein::writeMemory(MemoryType type, uint16_t addr, const std::vector<uin
  */
 bool Bilstein::readRAM(uint16_t addr, std::vector<uint8_t>& data)
 {
-  bool status = false;
-
   CommandBlock cmd;
   cmd.type = static_cast<uint8_t>(BilsteinBlockType::ReadRAM);
   cmd.payload = std::vector<uint8_t>({
@@ -77,11 +77,15 @@ bool Bilstein::readRAM(uint16_t addr, std::vector<uint8_t>& data)
     static_cast<uint8_t>(addr & 0xff),
     0x00
   });
-  status = sendCommand(cmd, data);
-  // TODO: read the byte from the response packet
+  const bool status = sendCommand(cmd, data);
+  // TODO: Isolate the desired bytes from the response
   return status;
 }
 
+/**
+ * Sends a command to write the provided data to the specified address in the
+ * ECU's RAM. Returns true when successful; false otherwise.
+ */
 bool Bilstein::writeRAM(uint16_t addr, uint8_t data)
 {
   std::vector<uint8_t> response;
@@ -103,8 +107,6 @@ bool Bilstein::writeRAM(uint16_t addr, uint8_t data)
  */
 bool Bilstein::readFaultMemory(uint16_t addr, std::vector<uint8_t>& data)
 {
-  bool status = false;
-
   CommandBlock cmd;
   cmd.type = static_cast<uint8_t>(BilsteinBlockType::ReadFaultMem);
   cmd.payload = std::vector<uint8_t>({
@@ -112,10 +114,15 @@ bool Bilstein::readFaultMemory(uint16_t addr, std::vector<uint8_t>& data)
     static_cast<uint8_t>(addr & 0xff),
     0x00
   });
-  status = sendCommand(cmd, data);
+  const bool status = sendCommand(cmd, data);
+  // TODO: Isolate the desired bytes from the response
   return status;
 }
 
+/**
+ * Sends a command to write data to the ECU fault code memory. Returns true when
+ * the command is successful and the data was written; false otherwise.
+ */
 bool Bilstein::writeFaultMemory(uint16_t addr, uint8_t data)
 {
   std::vector<uint8_t> response;

@@ -250,8 +250,6 @@ bool KWP71::writeRAM(uint16_t addr, const std::vector<uint8_t>& data)
 
   // Limit the maximum write payload to the size of the remaining
   // space in a single block (after accounting for the header/trailer).
-  // This is a max of 249 bytes for the standard variant, or 250 bytes
-  // for FIAT9141.
   if (data.size() <= (maxPayloadSize() - 3))
   {
     CommandBlock cmd;
@@ -281,8 +279,6 @@ bool KWP71::writeEEPROM(uint16_t addr, const std::vector<uint8_t>& data)
 
   // Limit the maximum write payload to the size of the remaining
   // space in a single block (after accounting for the header/trailer).
-  // This is a max of 249 bytes for the standard variant, or 250 bytes
-  // for FIAT9141.
   if (data.size() <= (maxPayloadSize() - 3))
   {
     CommandBlock cmd;

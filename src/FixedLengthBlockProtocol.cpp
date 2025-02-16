@@ -30,14 +30,22 @@ void FixedLengthBlockProtocol::setBlockPayload(const std::vector<uint8_t>& paylo
   memcpy(&m_sendBlockBuf[payloadStartPos], &payload[0], payload.size());
 }
 
+/**
+ * Sets the appropriate values in each of the sections of the block to transmit.
+ * Because this is a fixed-length block protocol, there is no length prefix byte
+ * nor is there a sequence number byte.
+ */
 bool FixedLengthBlockProtocol::setBlockSections(uint8_t blockTitle, std::vector<uint8_t>& payload)
 {
-  // TODO: We may want to make the return value reflect the success
-  // of checkValidityOfBlockAndPayload().
-  setBlockTitle(blockTitle);
-  setBlockPayload(payload);
-  setBlockTrailer();
-  return true;
+  bool status = false;
+  if (checkValidityOfBlockAndPayload(blockTitle, payload))
+  {
+    setBlockTitle(blockTitle);
+    setBlockPayload(payload);
+    setBlockTrailer();
+    status = true;
+  }
+  return status;
 }
 
 /**

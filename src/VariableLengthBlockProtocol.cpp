@@ -25,9 +25,8 @@ void VariableLengthBlockProtocol::setBlockSizePrefix(int payloadSize)
 {
   const uint8_t seqNumSize = (useSequenceNums() ? 1 : 0);
   const uint8_t titleSize = 1;
-  const uint8_t trailerSize = (trailerType() == BlockTrailerType::Checksum16Bit) ? 2 : 1;
 
-  m_sendBlockBuf[0] = seqNumSize + titleSize + payloadSize + trailerSize;
+  m_sendBlockBuf[0] = seqNumSize + titleSize + payloadSize + trailerLength();
 }
 
 /**

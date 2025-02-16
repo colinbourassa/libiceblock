@@ -108,7 +108,7 @@ bool BlockExchangeProtocol::initAndStartCommunication()
       if (readAckKeywordBytes())
       {
         m_connectionActive = true;
-        m_ifThreadPtr = std::make_unique<std::thread>(threadEntry, this);
+        m_ifThreadPtr = std::make_unique<std::thread>([this]{ commLoop(); });
         status = true;
       }
       else
@@ -151,8 +151,10 @@ bool BlockExchangeProtocol::isConnectionActive() const
 }
 
 /**
- * Populates the transmit buffer with all the appropriate parts of
- * a protocol block.
+ * Populates the transmit block buffer with the appropriate content. If the last
+ * block received from the ECU was an empty/ACK and the library has a spending
+ * command to send, that command will be used. Otherwise, the library will simply
+ * send an empty/ACK block.
  */
 bool BlockExchangeProtocol::populateBlock(bool& usedPendingCmd)
 {
@@ -504,14 +506,6 @@ bool BlockExchangeProtocol::sendCommand(CommandBlock cmd, std::vector<uint8_t>& 
   }
 
   return m_responseReadSuccess;
-}
-
-/**
- * Thread entry point, which calls the main communication loop function.
- */
-void BlockExchangeProtocol::threadEntry(BlockExchangeProtocol* iface)
-{
-  iface->commLoop();
 }
 
 /**

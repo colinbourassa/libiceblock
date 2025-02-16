@@ -87,10 +87,10 @@ endif()
 target_compile_features (${LIBNAME} PUBLIC cxx_std_17)
 target_link_libraries (${LIBNAME} spdlog::spdlog_header_only usb-1.0 ftdi1)
 
-add_executable (kwp71read ${SOURCE_SUBDIR}/kwp71read.cpp)
-add_executable (fiat9141read ${SOURCE_SUBDIR}/fiat9141read.cpp)
-add_executable (marelli1afread ${SOURCE_SUBDIR}/marelli1afread.cpp)
-add_executable (bilsteinread ${SOURCE_SUBDIR}/bilsteinread.cpp)
+add_executable (kwp71read ${SOURCE_SUBDIR}/test_utils/kwp71read.cpp)
+add_executable (fiat9141read ${SOURCE_SUBDIR}/test_utils/fiat9141read.cpp)
+add_executable (marelli1afread ${SOURCE_SUBDIR}/test_utils/marelli1afread.cpp)
+add_executable (bilsteinread ${SOURCE_SUBDIR}/test_utils/bilsteinread.cpp)
 
 if (MINGW OR WIN32)
 

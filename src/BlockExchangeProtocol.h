@@ -255,18 +255,47 @@ protected:
   /**
    * Returns the index of the last byte in the send block buffer.
    */
-  virtual uint8_t lastByteIndexOfSendBlock() const { return m_sendBlockBuf[0] - 1; }
+  virtual uint8_t lastByteIndexOfSendBlock() const = 0;
 
   /**
    * Returns the index of the last byte in the receive block buffer.
    */
-  virtual uint8_t lastByteIndexOfReceiveBlock() const { return m_recvBlockBuf[0] - 1; }
+  virtual uint8_t lastByteIndexOfReceiveBlock() const = 0;
 
+  /**
+   * Populates the transmit block buffer with the appropriate content. If the last
+   * block received from the ECU was an empty/ACK and the library has a spending
+   * command to send, that command will be used. Otherwise, the library will simply
+   * send an empty/ACK block.
+   */
   bool populateBlock(bool& usedPendingCommand);
+
+  /**
+   * Sets the appropriate values in each of the sections of the block to transmit.
+   */
   virtual bool setBlockSections(uint8_t blockTitle, std::vector<uint8_t>& payload) = 0;
+
+  /**
+   * Sets the provided block title value in the appropriate location of the
+   * transmit block buffer.
+   */
   virtual void setBlockTitle(uint8_t title) = 0;
+
+  /**
+   * Sets the provided block title value in the appropriate location of the
+   * transmit block buffer.
+   */
   virtual void setBlockPayload(const std::vector<uint8_t>& payload) = 0;
+
+  /**
+   * Sets the trailer byte(s) in the transmit buffer depending on the type of
+   * trailer used in in the protocol implementation.
+   */
   void setBlockTrailer();
+
+  /**
+   * Returns the length (in bytes) of the block trailer used by the protocol.
+   */
   uint8_t trailerLength() const;
 
   virtual bool recvBlock(std::chrono::milliseconds timeout = std::chrono::milliseconds(1000)) = 0;
@@ -299,6 +328,5 @@ private:
   void closeFtdi();
   bool slowInit(uint8_t address, int databits, int parity);
   void commLoop();
-  static void threadEntry(BlockExchangeProtocol* iface);
 };
 
