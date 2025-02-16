@@ -1,6 +1,6 @@
 #pragma once
 
-#include "BlockExchangeProtocol.h"
+#include "VariableLengthBlockProtocol.h"
 
 enum class Marelli1AFBlockType : uint8_t
 {
@@ -59,7 +59,7 @@ enum class Marelli1AFPartNumberType : uint8_t
  * gearbox controller on the Ferrari 355 F1. Some of the protocol's engine-
  * specific features must be unsupported in this configuration.
  */
-class Marelli1AF : public BlockExchangeProtocol
+class Marelli1AF : public VariableLengthBlockProtocol
 {
 public:
   explicit Marelli1AF(int baudRate, LineType initLine, bool verbose);

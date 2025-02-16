@@ -27,7 +27,8 @@ enum class BlockTrailerType
 {
   Fixed03,
   Checksum8Bit,
-  Checksum16Bit
+  Checksum16Bit,
+  XOR
 };
 
 /**
@@ -149,6 +150,16 @@ public:
   virtual bool writeSecurityCode(const std::vector<uint8_t>& securityCode) { return false; }
 
 protected:
+  int m_baudRate = 9600;
+  LineType m_slowInitLine = LineType::KLine;
+  uint8_t m_sendBlockBuf[256];
+  uint8_t m_recvBlockBuf[256];
+  uint8_t m_lastReceivedBlockTitle = 0;
+  std::vector<uint8_t> m_lastReceivedPayload;
+  std::vector<std::vector<uint8_t>> m_idInfoStrings;
+  bool m_commandIsPending = false;
+  bool m_waitingForReply = false;
+
   /**
    * Returns true when the protocol requires that the receiver echo the inverse
    * of each byte before the sender will transmit the next byte.
@@ -188,12 +199,6 @@ protected:
    * Returns the number of bytes in the keyword sequence.
    */
   virtual int isoKeywordNumBytes() const = 0;
-
-  /**
-   * Returns true when the protocol requires that each block have an incrementing
-   * sequence number in byte position 1.
-   */
-  virtual bool useSequenceNums() const = 0;
 
   /**
    * Returns the type of trailer required by the protocol on each block.
@@ -247,30 +252,37 @@ protected:
    */
   virtual bool doPostKeywordSequence() { return true; }
 
-  int m_baudRate = 9600;
-  LineType m_slowInitLine = LineType::KLine;
-  uint8_t m_sendBlockBuf[256];
-  uint8_t m_recvBlockBuf[256];
-  uint8_t m_lastUsedSeqNum = 0;
-  uint8_t m_lastReceivedBlockTitle = 0;
-  std::vector<uint8_t> m_lastReceivedPayload;
-  std::vector<std::vector<uint8_t>> m_idInfoStrings;
+  /**
+   * Returns the index of the last byte in the send block buffer.
+   */
+  virtual uint8_t lastByteIndexOfSendBlock() const { return m_sendBlockBuf[0] - 1; }
 
-  bool recvBlock(std::chrono::milliseconds timeout = std::chrono::milliseconds(1000));
-  bool sendBlock(bool sendBufIsPrepopulated = false);
+  /**
+   * Returns the index of the last byte in the receive block buffer.
+   */
+  virtual uint8_t lastByteIndexOfReceiveBlock() const { return m_recvBlockBuf[0] - 1; }
+
+  bool populateBlock(bool& usedPendingCommand);
+  virtual bool setBlockSections(uint8_t blockTitle, std::vector<uint8_t>& payload) = 0;
+  virtual void setBlockTitle(uint8_t title) = 0;
+  virtual void setBlockPayload(const std::vector<uint8_t>& payload) = 0;
+  void setBlockTrailer();
+  uint8_t trailerLength() const;
+
+  virtual bool recvBlock(std::chrono::milliseconds timeout = std::chrono::milliseconds(1000)) = 0;
+  virtual bool sendBlock(bool sendBufIsPrepopulated = false) = 0;
   bool shutdownRequested() const { return m_shutdown; }
-  void processReceivedBlock();
+  virtual void processReceivedBlock() = 0;
+  bool readSerial(uint8_t* buf, int count, std::chrono::milliseconds = std::chrono::milliseconds(1000));
+  bool writeSerial(uint8_t* buf, int count);
 
 private:
   bool m_connectionActive = false;
   bool m_shutdown = false;
   uint8_t m_ecuAddr = 0x10;
-
   std::unique_ptr<std::thread> m_ifThreadPtr = nullptr;
   std::string m_deviceName;
   CommandBlock m_pendingCmd;
-  bool m_commandIsPending = false;
-  bool m_waitingForReply = false;
   bool m_responseReadSuccess = false;
   std::condition_variable m_responseCondVar;
   std::mutex m_responseMutex;
@@ -278,14 +290,7 @@ private:
   std::mutex m_commandMutex;
   struct ftdi_context m_ftdi;
 
-  void setBlockSizePrefix(int payloadSize);
-  void setBlockSequenceNum();
-  void setBlockTitle(uint8_t title);
-  void setBlockPayload(const std::vector<uint8_t>& payload);
-  void setBlockTrailer();
-
   bool initAndStartCommunication();
-  bool populateBlock(bool& usedPendingCommand);
   bool waitForISOSequence(std::chrono::milliseconds timeout,
                           std::vector<uint8_t>& isoBytes);
   bool isConnectionActive() const;
@@ -295,8 +300,5 @@ private:
   bool slowInit(uint8_t address, int databits, int parity);
   void commLoop();
   static void threadEntry(BlockExchangeProtocol* iface);
-
-  bool readSerial(uint8_t* buf, int count, std::chrono::milliseconds = std::chrono::milliseconds(1000));
-  bool writeSerial(uint8_t* buf, int count);
 };
 

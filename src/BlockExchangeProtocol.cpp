@@ -130,8 +130,7 @@ bool BlockExchangeProtocol::initAndStartCommunication()
 }
 
 /**
- * Shuts down the connection and waits for the connection thread to
- * finish.
+ * Shuts down the connection and waits for the connection thread to finish.
  */
 void BlockExchangeProtocol::disconnect()
 {
@@ -173,77 +172,7 @@ bool BlockExchangeProtocol::populateBlock(bool& usedPendingCmd)
     usedPendingCmd = false;
   }
 
-  if (checkValidityOfBlockAndPayload(blockTitle, payload))
-  {
-    setBlockSizePrefix(payload.size());
-    setBlockSequenceNum();
-    setBlockTitle(blockTitle);
-    setBlockPayload(payload);
-    setBlockTrailer();
-    status = true;
-  }
-
-  return status;
-}
-
-/**
- * Sets the first byte in the block to reflect the size of the block (in bytes).
- * Depending on the protocol, the count may include (a) the block size byte
- * itself, (b) a sequence number byte, (c) the payload, and (d) the trailer
- * (which may be a fixed value, an 8-bit checksum, or a 16-bit checksum).
- *
- * Note: The GM-developed KW82 protocol actually includes the count byte itself
- * in the total byte count. Support for the KW82 protocol is not currently
- * planned, but if it were added at some point in the future, this routine would
- * need to be adjusted.
- */
-void BlockExchangeProtocol::setBlockSizePrefix(int payloadSize)
-{
-  const uint8_t seqNumSize = (useSequenceNums() ? 1 : 0);
-  const uint8_t titleSize = 1;
-  const uint8_t trailerSize = (trailerType() == BlockTrailerType::Checksum16Bit) ? 2 : 1;
-
-  m_sendBlockBuf[0] = seqNumSize + titleSize + payloadSize + trailerSize;
-}
-
-/**
- * Sets the appropriate byte in the transmit buffer to the block sequence
- * number. If the protocol does not use sequence numbers, this function has no
- * effect.
- */
-void BlockExchangeProtocol::setBlockSequenceNum()
-{
-  if (useSequenceNums())
-  {
-    m_sendBlockBuf[1] = ++m_lastUsedSeqNum;
-  }
-}
-
-/**
- * Sets the provided block title in the transmit buffer at the appropriate
- * location (depending on whether the protocol reserves a byte for sequence
- * numbers.)
- */
-void BlockExchangeProtocol::setBlockTitle(uint8_t title)
-{
-  if (useSequenceNums())
-  {
-    m_sendBlockBuf[2] = title;
-  }
-  else
-  {
-    m_sendBlockBuf[1] = title;
-  }
-}
-
-/**
- * Copies the provided payload bytes to the appropriate location in the
- * transmit buffer.
- */
-void BlockExchangeProtocol::setBlockPayload(const std::vector<uint8_t>& payload)
-{
-  const uint8_t payloadStartPos = useSequenceNums() ? 3 : 2;
-  memcpy(&m_sendBlockBuf[payloadStartPos], &payload[0], payload.size());
+  return setBlockSections(blockTitle, payload);
 }
 
 /**
@@ -252,163 +181,59 @@ void BlockExchangeProtocol::setBlockPayload(const std::vector<uint8_t>& payload)
  */
 void BlockExchangeProtocol::setBlockTrailer()
 {
+  const uint8_t lastByteIndex = lastByteIndexOfSendBlock();
+
   if (trailerType() == BlockTrailerType::Fixed03)
   {
-    m_sendBlockBuf[m_sendBlockBuf[0]] = 0x03;
+    m_sendBlockBuf[lastByteIndex] = 0x03;
   }
   else if (trailerType() == BlockTrailerType::Checksum8Bit)
   {
     // compute 8-bit checksum and store in the last byte of the block
-    m_sendBlockBuf[m_sendBlockBuf[0]] = m_sendBlockBuf[0];
-    for (int i = 1; i < m_sendBlockBuf[0]; i++)
+    m_sendBlockBuf[lastByteIndex] = m_sendBlockBuf[0];
+    for (int i = 1; i < lastByteIndex; i++)
     {
-      m_sendBlockBuf[m_sendBlockBuf[0]] += m_sendBlockBuf[i];
+      m_sendBlockBuf[lastByteIndex] += m_sendBlockBuf[i];
     }
   }
   else if (trailerType() == BlockTrailerType::Checksum16Bit)
   {
     uint16_t checksum16 = 0;
-    for (int i = 0; i < m_sendBlockBuf[0]; i++)
+    for (int i = 0; i < lastByteIndex - 1; i++)
     {
       checksum16 += m_sendBlockBuf[i];
     }
-    m_sendBlockBuf[m_sendBlockBuf[0] - 1] = static_cast<uint8_t>(checksum16 >> 8);
-    m_sendBlockBuf[m_sendBlockBuf[0]] = static_cast<uint8_t>(checksum16 & 0xff);
+    m_sendBlockBuf[lastByteIndex - 1] = static_cast<uint8_t>(checksum16 >> 8);
+    m_sendBlockBuf[lastByteIndex] = static_cast<uint8_t>(checksum16 & 0xff);
+  }
+  else if (trailerType() == BlockTrailerType::XOR)
+  {
+    m_sendBlockBuf[lastByteIndex] = m_sendBlockBuf[0];
+    for (int i = 1; i < lastByteIndex; i++)
+    {
+      m_sendBlockBuf[lastByteIndex] ^= m_sendBlockBuf[i];
+    }
   }
 }
 
 /**
- * Sends a block by transmitting it one byte at a time. For certain protocols,
- * the transmitting side must wait for the inverse of each byte echoed by the
- * receiver before transmitting the next byte (with the exception of the last
- * byte, which is not echoed.)
- * Returns true if the entire block was sent successfuly; false otherwise.
+ * Returns the length (in bytes) of the block trailer used by the protocol.
  */
-bool BlockExchangeProtocol::sendBlock(bool sendBufIsPrepopulated)
+uint8_t BlockExchangeProtocol::trailerLength() const
 {
-  bool status = true;
-  uint8_t index = 0;
-  uint8_t loopback = 0;
-  uint8_t ack = 0;
-  uint8_t ackCompare = 0;
-  bool usedPendingCommand = false;
-  const bool isDebugLogging = spdlog::should_log(spdlog::level::debug);
-  std::string msg("send: ");
-
-  if (!sendBufIsPrepopulated)
+  uint8_t length = 0;
+  if ((trailerType() == BlockTrailerType::Fixed03) ||
+      (trailerType() == BlockTrailerType::Checksum8Bit) ||
+      (trailerType() == BlockTrailerType::XOR))
   {
-    populateBlock(usedPendingCommand);
+    length = 1;
+  }
+  else if (trailerType() == BlockTrailerType::Checksum16Bit)
+  {
+    length = 2;
   }
 
-  while (status && (index <= m_sendBlockBuf[0]))
-  {
-    // Transmit the block one byte at a time, reading back the same byte as
-    // it appears in the Rx buffer (due to the loopback).
-    if (writeSerial(&m_sendBlockBuf[index], 1) && readSerial(&loopback, 1))
-    {
-      if (isDebugLogging)
-      {
-        msg += fmt::format("{:02X} ", m_sendBlockBuf[index]);
-      }
-
-      // If the current protocol variant calls for it, read the bitwise
-      // inversion of the last sent byte as it is echoed by the receiver.
-      if (bytesEchoedDuringBlockReceipt() && (index < m_sendBlockBuf[0]))
-      {
-        ackCompare = ~(m_sendBlockBuf[index]);
-        status = readSerial(&ack, 1) && (ack == ackCompare);
-      }
-      std::this_thread::sleep_for(std::chrono::milliseconds(2));
-      index++;
-    }
-    else
-    {
-      status = false;
-    }
-  }
-
-  spdlog::debug(msg);
-
-  // if we had been waiting to send a command block (i.e. not just an 09/ACK),
-  // then this sendBlock() call would have transmitted it so the 'pending'
-  // flag may be cleared
-  if (status && usedPendingCommand)
-  {
-    m_commandIsPending = false;
-    m_waitingForReply = true;
-  }
-
-  return status;
-}
-
-/**
- * Reads a block from the serial port, the length of which is determined by
- * the first byte. In certain variants of the protocol, each byte (except the
- * last) is positively acknowledged with its bitwise inversion. Returns true if
- * all the expected bytes are received, false otherwise.
- */
-bool BlockExchangeProtocol::recvBlock(std::chrono::milliseconds timeout)
-{
-  bool status = true;
-  uint16_t index = 1;
-  uint8_t loopback = 0;
-  uint8_t ack = 0;
-  const bool isDebugLogging = spdlog::should_log(spdlog::level::debug);
-  std::string msg("recv: ");
-
-  if (readSerial(&m_recvBlockBuf[0], 1, timeout))
-  {
-    if (isDebugLogging)
-    {
-      msg += fmt::format("{:02X} ", m_recvBlockBuf[0]);
-    }
-
-    if (bytesEchoedDuringBlockReceipt())
-    {
-      // ack the pkt length byte
-      std::this_thread::sleep_for(std::chrono::milliseconds(2));
-      ack = ~(m_recvBlockBuf[0]);
-      status = writeSerial(&ack, 1) && readSerial(&loopback, 1);
-    }
-
-    while (status && (index <= m_recvBlockBuf[0]))
-    {
-      if (readSerial(&m_recvBlockBuf[index], 1))
-      {
-        if (isDebugLogging)
-        {
-          msg += fmt::format("{:02X} ", m_recvBlockBuf[index]);
-        }
-
-        // every byte except the last in the block is ack'd
-        if (bytesEchoedDuringBlockReceipt() && (index < m_recvBlockBuf[0]))
-        {
-          std::this_thread::sleep_for(std::chrono::milliseconds(2));
-          ack = ~(m_recvBlockBuf[index]);
-          status = writeSerial(&ack, 1) && readSerial(&loopback, 1);
-        }
-        index++;
-      }
-      else
-      {
-        spdlog::error("Timed out while receiving block data!");
-        status = false;
-      }
-    }
-
-    spdlog::debug(msg);
-  }
-  else
-  {
-    status = false;
-  }
-
-  if (status)
-  {
-    processReceivedBlock();
-  }
-
-  return status;
+  return length;
 }
 
 /**
@@ -682,34 +507,6 @@ bool BlockExchangeProtocol::sendCommand(CommandBlock cmd, std::vector<uint8_t>& 
 }
 
 /**
- * Captures the data from the payload of the block that was most
- * recently received.
- */
-void BlockExchangeProtocol::processReceivedBlock()
-{
-  int payloadLen = 0;
-  int blockPayloadStartPos = 0;
-
-  if (useSequenceNums())
-  {
-    m_lastUsedSeqNum = m_recvBlockBuf[1];
-    m_lastReceivedBlockTitle = m_recvBlockBuf[2];
-    payloadLen = m_recvBlockBuf[0] - 3;
-    blockPayloadStartPos = 3;
-  }
-  else
-  {
-    m_lastReceivedBlockTitle = m_recvBlockBuf[1];
-    payloadLen = m_recvBlockBuf[0] - 2;
-    blockPayloadStartPos = 2;
-  }
-
-  m_lastReceivedPayload.insert(m_lastReceivedPayload.end(),
-                               &m_recvBlockBuf[blockPayloadStartPos],
-                               &m_recvBlockBuf[blockPayloadStartPos + payloadLen]);
-}
-
-/**
  * Thread entry point, which calls the main communication loop function.
  */
 void BlockExchangeProtocol::threadEntry(BlockExchangeProtocol* iface)
@@ -719,7 +516,7 @@ void BlockExchangeProtocol::threadEntry(BlockExchangeProtocol* iface)
 
 /**
  * Loop that maintains a connection with the ECU. When no particular
- * command is queued, the empty/ACK (09) command is sent as a keepalive.
+ * command is queued, the empty/ACK command is sent as a keepalive.
  * Any other commands are sent, one at a time, and the response is
  * collected before the next command is sent.
  */

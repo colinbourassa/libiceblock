@@ -1,6 +1,6 @@
 #pragma once
 
-#include "BlockExchangeProtocol.h"
+#include "VariableLengthBlockProtocol.h"
 #include <cstdint>
 
 /**
@@ -40,7 +40,7 @@ enum class KWP71BlockType : uint8_t
   ROMContent        = 0xFE
 };
 
-class KWP71 : public BlockExchangeProtocol
+class KWP71 : public VariableLengthBlockProtocol
 {
 public:
   explicit KWP71(int baudRate, LineType initLine, bool verbose);

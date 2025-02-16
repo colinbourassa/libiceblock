@@ -1,7 +1,7 @@
 #include "Marelli1AF.h"
 
 Marelli1AF::Marelli1AF(int baud, LineType initLine, bool verbose) :
-  BlockExchangeProtocol(baud, initLine, verbose)
+  VariableLengthBlockProtocol(baud, initLine, verbose)
 {
 }
 

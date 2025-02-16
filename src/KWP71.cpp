@@ -1,7 +1,7 @@
 #include "KWP71.h"
 
 KWP71::KWP71(int baud, LineType initLine, bool verbose) :
-  BlockExchangeProtocol(baud, initLine, verbose)
+  VariableLengthBlockProtocol(baud, initLine, verbose)
 {
 }
 

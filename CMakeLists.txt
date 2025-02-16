@@ -60,16 +60,22 @@ include_directories ("${CMAKE_SOURCE_DIR}/src" "${CMAKE_BINARY_DIR}" "${LIBRARY_
 set (ALL_SOURCE_FILES
        "${SOURCE_SUBDIR}/ftdi_enumerator.cpp"
        "${SOURCE_SUBDIR}/ftdi_enumerator.h"
+       "${SOURCE_SUBDIR}/Bilstein.cpp"
+       "${SOURCE_SUBDIR}/Bilstein.h"
        "${SOURCE_SUBDIR}/BlockExchangeProtocol.cpp"
        "${SOURCE_SUBDIR}/BlockExchangeProtocol.h"
        "${SOURCE_SUBDIR}/Fiat9141.cpp"
        "${SOURCE_SUBDIR}/Fiat9141.h"
+       "${SOURCE_SUBDIR}/FixedLengthBlockProtocol.cpp"
+       "${SOURCE_SUBDIR}/FixedLengthBlockProtocol.h"
        "${SOURCE_SUBDIR}/KWP71.cpp"
        "${SOURCE_SUBDIR}/KWP71.h"
        "${SOURCE_SUBDIR}/library_info.cpp"
        "${SOURCE_SUBDIR}/library_info.h"
        "${SOURCE_SUBDIR}/Marelli1AF.cpp"
        "${SOURCE_SUBDIR}/Marelli1AF.h"
+       "${SOURCE_SUBDIR}/VariableLengthBlockProtocol.cpp"
+       "${SOURCE_SUBDIR}/VariableLengthBlockProtocol.h"
     )
 
 if (BUILD_STATIC STREQUAL "ON")
@@ -84,6 +90,7 @@ target_link_libraries (${LIBNAME} spdlog::spdlog_header_only usb-1.0 ftdi1)
 add_executable (kwp71read ${SOURCE_SUBDIR}/kwp71read.cpp)
 add_executable (fiat9141read ${SOURCE_SUBDIR}/fiat9141read.cpp)
 add_executable (marelli1afread ${SOURCE_SUBDIR}/marelli1afread.cpp)
+add_executable (bilsteinread ${SOURCE_SUBDIR}/bilsteinread.cpp)
 
 if (MINGW OR WIN32)
 
@@ -107,6 +114,7 @@ if (MINGW OR WIN32)
   target_link_libraries (kwp71read ${LIBNAME})
   target_link_libraries (fiat9141read ${LIBNAME})
   target_link_libraries (marelli1afread ${LIBNAME})
+  target_link_libraries (bilsteinread ${LIBNAME})
 
   # MXE requires that documentation and test applications not be installed
   # by default, so we provide a couple env vars to control this
@@ -166,6 +174,7 @@ else()
   target_link_libraries (kwp71read ${LIBNAME})
   target_link_libraries (fiat9141read ${LIBNAME})
   target_link_libraries (marelli1afread ${LIBNAME})
+  target_link_libraries (bilsteinread ${LIBNAME})
 
   if (ENABLE_DOC_INSTALL)
     install (DIRECTORY DESTINATION "${CMAKE_INSTALL_DOCDIR}" DIRECTORY_PERMISSIONS
@@ -262,7 +271,7 @@ endif()
 # install the test applications
 #
 if (ENABLE_TESTAPP_INSTALL)
-  install (TARGETS kwp71read fiat9141read marelli1afread
+  install (TARGETS kwp71read fiat9141read marelli1afread bilsteinread
            RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
 else()
   message (STATUS "Skipping installation of test application.")
