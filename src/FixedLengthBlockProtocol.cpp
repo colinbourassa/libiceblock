@@ -113,10 +113,10 @@ bool FixedLengthBlockProtocol::sendBlock(bool sendBufIsPrepopulated)
 }
 
 /**
- * Reads a block from the serial port, the length of which is determined by
- * the first byte. In certain variants of the protocol, each byte (except the
- * last) is positively acknowledged with its bitwise inversion. Returns true if
- * all the expected bytes are received, false otherwise.
+ * Reads a block from the serial port, the length of which is fixed. This
+ * function allows for protocol variants in which each byte (except the last) is
+ * positively acknowledged with its bitwise inversion. Returns true if all the
+ * expected bytes are received, false otherwise.
  */
 bool FixedLengthBlockProtocol::recvBlock(std::chrono::milliseconds timeout)
 {
