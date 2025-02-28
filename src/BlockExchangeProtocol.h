@@ -111,6 +111,9 @@ public:
    * Reads a stored parametric value. This data is considered to be managed and
    * accessed separately from the normal RAM/ROM address space. Marelli 1AF
    * supports this function, but other protocols may not.
+   * Note: unlike the readMemory() function, this function does not transmit the
+   * number of bytes desired in the response; the length of the returned data is
+   * determined by the remote ECU.
    */
   virtual bool readStoredValue(uint8_t id, std::vector<uint8_t>& data) { return false; }
 

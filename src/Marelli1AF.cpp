@@ -253,6 +253,13 @@ bool Marelli1AF::readMemory(MemoryType type, uint16_t addr, uint16_t numBytes, s
   return status;
 }
 
+/**
+ * Reads a stored parametric value. This data is considered to be managed and
+ * accessed separately from the normal RAM/ROM address space.
+ * Note: unlike the readMemory() function, this function does not transmit the
+ * number of bytes desired in the response; the length of the returned data is
+ * determined by the remote ECU.
+ */
 bool Marelli1AF::readStoredValue(uint8_t id, std::vector<uint8_t>& valueSequence)
 {
   CommandBlock cmd;
@@ -262,6 +269,10 @@ bool Marelli1AF::readStoredValue(uint8_t id, std::vector<uint8_t>& valueSequence
   return status;
 }
 
+/**
+ * Reads a "snapshot" page, which is essentially a fixed-size block of parametric
+ * data that is given an index.
+ */
 bool Marelli1AF::readSnapshot(uint8_t snapshotCode, std::vector<uint8_t>& snapshotData)
 {
   CommandBlock cmd;
@@ -271,6 +282,9 @@ bool Marelli1AF::readSnapshot(uint8_t snapshotCode, std::vector<uint8_t>& snapsh
   return status;
 }
 
+/**
+ * Reads a sampled value from one or more ADC channels.
+ */
 bool Marelli1AF::readADCChannel(const std::vector<uint8_t>& channelList,
                                 std::vector<uint8_t>& channelValues)
 {
@@ -303,6 +317,10 @@ bool Marelli1AF::writeSecurityCode(const std::vector<uint8_t>& securityCode)
   return status;
 }
 
+/**
+ * Reads byte strings that generally contain ASCII representations of ECU
+ * hardware and firmware revision numbers.
+ */
 bool Marelli1AF::readIDCode(std::vector<std::vector<uint8_t>>& idString)
 {
   idString.resize(3);
@@ -336,6 +354,9 @@ bool Marelli1AF::readErrorValue(uint8_t code, std::vector<uint8_t>& data)
   return status;
 }
 
+/**
+ * Clears any fault code data.
+ */
 bool Marelli1AF::eraseFaultCodes()
 {
   std::vector<uint8_t> data;
