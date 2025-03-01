@@ -49,7 +49,7 @@ enum class MemoryType
  * This class forms the basis of "block exchange" diagnostic protocols, which
  * all involve the ECU and test equipment taking turns exchanging message blocks.
  * The initial connection is made with a "slow init" sequence, in which a
- * predetermined ECU address is sent at 5 baud. The ECU will then respond with a
+ * supplied ECU address is sent at 5 baud. The ECU will then respond with a
  * sequence of "keyword" bytes (sometimes also known as "ISO" bytes because of
  * this exchange having been described by the ISO-9141 standard.)
  */

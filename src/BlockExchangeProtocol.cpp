@@ -5,7 +5,10 @@
 #include <spdlog/fmt/fmt.h>
 
 /**
- * Construct with the baud rate, line used for sending the slow-init byte, and debug verbosity flag.
+ * Describes a diagnostic protocol that uses a continuous exchange of frames
+ * between the application using this library and the ECU being tested.
+ * Construct with the baud rate, line used for sending the slow-init byte, and
+ * debug verbosity flag.
  */
 BlockExchangeProtocol::BlockExchangeProtocol(int baudRate, LineType initLine, bool verbose) :
   m_baudRate(baudRate),
@@ -17,6 +20,8 @@ BlockExchangeProtocol::BlockExchangeProtocol(int baudRate, LineType initLine, bo
 
 BlockExchangeProtocol::~BlockExchangeProtocol()
 {
+  disconnect();
+  ftdi_deinit(&m_ftdi);
 }
 
 /**
@@ -142,7 +147,6 @@ void BlockExchangeProtocol::disconnect()
   }
   m_ifThreadPtr = nullptr;
   ftdi_usb_close(&m_ftdi);
-  ftdi_deinit(&m_ftdi);
 }
 
 bool BlockExchangeProtocol::isConnectionActive() const
@@ -583,5 +587,6 @@ void BlockExchangeProtocol::commLoop()
       std::this_thread::sleep_for(std::chrono::milliseconds(timeBeforeReconnectMs()));
     }
   }
+  m_connectionActive = false;
 }
 
