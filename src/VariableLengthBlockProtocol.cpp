@@ -6,10 +6,6 @@ VariableLengthBlockProtocol::VariableLengthBlockProtocol(int baudRate, LineType 
 {
 }
 
-VariableLengthBlockProtocol::~VariableLengthBlockProtocol()
-{
-}
-
 /**
  * Sets the first byte in the block to reflect the size of the block (in bytes).
  * Depending on the protocol, the count may include (a) the block size byte

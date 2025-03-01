@@ -6,10 +6,6 @@ FixedLengthBlockProtocol::FixedLengthBlockProtocol(int baudRate, LineType initLi
 {
 }
 
-FixedLengthBlockProtocol::~FixedLengthBlockProtocol()
-{
-}
-
 /**
  * Sets the provided block title in the transmit buffer at the first location.
  */

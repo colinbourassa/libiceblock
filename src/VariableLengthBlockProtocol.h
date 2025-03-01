@@ -3,12 +3,15 @@
 #include "BlockExchangeProtocol.h"
 
 /**
+ * Describes a block-exchange protocol whose blocks are of variable length. Such
+ * protocols include a byte (at the start of each block) that indicates the
+ * length of the block.
+ * Examples include KWP71, FIAT-9141, and Marelli 1AF.
  */
 class VariableLengthBlockProtocol : public BlockExchangeProtocol
 {
 public:
   explicit VariableLengthBlockProtocol(int baudRate, LineType initLine, bool verbose);
-  virtual ~VariableLengthBlockProtocol();
 
 protected:
   /**

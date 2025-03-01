@@ -8,7 +8,6 @@ class FixedLengthBlockProtocol : public BlockExchangeProtocol
 {
 public:
   explicit FixedLengthBlockProtocol(int baudRate, LineType initLine, bool verbose);
-  virtual ~FixedLengthBlockProtocol();
 
 protected:
   virtual uint8_t lastByteIndexOfSendBlock() const override { return blockLength() - 1; }
