@@ -29,10 +29,10 @@ public:
   explicit Bilstein(int baudRate, LineType initLine, bool verbose);
 
   virtual bool readMemory(MemoryType type, uint16_t addr, uint16_t numBytes, std::vector<uint8_t>& data) override;
-  virtual bool writeMemory(MemoryType type, uint16_t addr, const std::vector<uint8_t>& data);
+  virtual bool writeMemory(MemoryType type, uint16_t addr, const std::vector<uint8_t>& data) override;
 
 protected:
-  virtual int blockLength() const { return 5; }
+  virtual int blockLength() const override { return 5; }
   virtual bool bytesEchoedDuringBlockReceipt() const override { return false; }
   virtual int initDataBits() const override { return 8; }
   virtual int initParity() const override { return 0; }
