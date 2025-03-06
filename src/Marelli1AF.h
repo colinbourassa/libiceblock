@@ -1,5 +1,4 @@
 #pragma once
-
 #include "VariableLengthBlockProtocol.h"
 
 enum class Marelli1AFBlockType : uint8_t

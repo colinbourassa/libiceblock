@@ -1,8 +1,9 @@
 #pragma once
-
 #include "BlockExchangeProtocol.h"
 
 /**
+ * Describes a protocol that always sends and receives blocks of a fixed number
+ * of bytes.
  */
 class FixedLengthBlockProtocol : public BlockExchangeProtocol
 {

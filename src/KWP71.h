@@ -1,5 +1,4 @@
 #pragma once
-
 #include "VariableLengthBlockProtocol.h"
 #include <cstdint>
 
