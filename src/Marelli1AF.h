@@ -10,7 +10,7 @@ enum class Marelli1AFBlockType : uint8_t
   SelectBlockNACK   = 0x38,
 
   // General use blocks
-  //SetDiagnosticMode = 0x01, // TODO: Response type is listed as 0x0D - is that correct?
+  SetDiagnosticMode = 0x01, // TODO: Response type is listed as 0x0D - is that correct?
   StopCommunication = 0x05,
   EmptyAck          = 0x09,
   NACK              = 0x0A,
